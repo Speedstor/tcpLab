@@ -1,0 +1,16 @@
+TCP Header
+	|-SourcePort	: 52999
+	|-Destination Port: 8900
+	|-Sequence Number	: 11371
+	|-Acknowledge Seq	: 0
+	|-Header Length	: 5 DWORDS or 20 BYTES
+	|--------Flags----------
+		|-Urgent Flag	: 0
+		|-Ack Flag	: 0
+		|-Push Flag	: 0
+		|-Reset Flag	: 0
+		|-Synchronise Flag	: 1
+		|-Finish Flag	: 0
+	|-Window size	: 65535
+	|-Checksum	: 30547
+	|-Urgent Pointer	: 0
