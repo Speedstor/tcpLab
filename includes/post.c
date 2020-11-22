@@ -6,7 +6,6 @@
 #include <errno.h>
 #include <pthread.h>
  
-#include <curl/curl.h>
 
 #define THREAD_SIZE 50
 
@@ -17,75 +16,9 @@ struct MemoryStruct {
 
 pthread_t threadsArr[THREAD_SIZE];
 int threadFlag = 0;
- 
-static size_t
-WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
-{
-  size_t realsize = size * nmemb;
-  struct MemoryStruct *mem = (struct MemoryStruct *)userp;
- 
-  char *ptr = realloc(mem->memory, mem->size + realsize + 1);
-  if(ptr == NULL) {
-    /* out of memory! */ 
-    printf("not enough memory (realloc returned NULL)\n");
-    return 0;
-  }
- 
-  mem->memory = ptr;
-  memcpy(&(mem->memory[mem->size]), contents, realsize);
-  mem->size += realsize;
-  mem->memory[mem->size] = 0;
- 
-  return realsize;
-}
 
 
-void* db_put(void* jsonPayloadP) {
-  char* jsonPayload = jsonPayloadP;
-
-  CURL *curl;
-  CURLcode res;
-
-  struct MemoryStruct chunk;
- 
-  chunk.memory = malloc(1);  /* will be grown as needed by the realloc above */ 
-  chunk.size = 0;    /* no data at this point */ 
- 
-  curl = curl_easy_init();
-  if(curl) {
-    curl_easy_setopt(curl, CURLOPT_URL, "https://speedstor.net/tcpIp/put.php");
-
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, jsonPayload);
-    /* if we don't provide POSTFIELDSIZE, libcurl will strlen() by
-       itself */ 
-    // curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)strlen(jsonPayload));
-
-    /* send all data to this function  */ 
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-
-    /* we pass our 'chunk' struct to the callback function */ 
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&chunk);
- 
- 
-    /* some servers don't like requests that are made without a user-agent
-        field, so we provide one */ 
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "libcurl-agent/1.0");
-
-    /* Perform the request, res will get the return code */ 
-    res = curl_easy_perform(curl);
-    /* Check for errors */ 
-    if(res != CURLE_OK)
-      fprintf(stderr, "curl_easy_perform() failed: %s\n",
-              curl_easy_strerror(res));
- 
-    /* always cleanup */ 
-    curl_easy_cleanup(curl);
-
-    printf("\n%s\nPost Response: %s\n", jsonPayload, chunk.memory);
-  }
-}
-
-void* async_db_put(void* jsonPayloadP, int option){
+void async_db_put(void* jsonPayloadP, int option){
   threadFlag++;
   if(threadFlag >= 50) threadFlag = 0;
 

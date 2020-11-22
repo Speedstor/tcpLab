@@ -66,8 +66,8 @@
         };
 
         int payload_len;
-        char* payload;
-	    char* pPacket;
+        unsigned char* payload;
+	    unsigned char* pPacket;
     };
 #endif
 
@@ -164,10 +164,10 @@ int send_packet(int sock, int protocol, int src_port, int dst_port, char dest_ip
         return -1;
     }
 
-    struct sockaddr_in *sockaddr4;
+    // struct sockaddr_in *sockaddr4;
     struct udp_packet uBufferPacket;
     struct tcp_packet tBufferPacket;
-    struct tcphdr* pTcphdr = &tBufferPacket.tcp;
+    // struct tcphdr* pTcphdr = &tBufferPacket.tcp;
     //struct custom_udp_packet c_uBufferPacket;
     //struct custom_udp_packet c_tBufferPacket;
 
@@ -175,8 +175,8 @@ int send_packet(int sock, int protocol, int src_port, int dst_port, char dest_ip
     int headersize;
     int packetsize;
     int tcpHeaderLen;
-    int seq; 
-    int seq_ack; 
+    uint32_t seq; 
+    uint32_t seq_ack; 
 
     int success;
 
@@ -230,6 +230,7 @@ int send_packet(int sock, int protocol, int src_port, int dst_port, char dest_ip
         seq = 1;
         seq_ack = 0;
         if(pParam != NULL){
+            printf("%s\n", pParam);
             // char secParam[]
             char *pSecParam = strchr(pParam + 1, '\t');
             if(pSecParam != NULL){
@@ -273,7 +274,7 @@ int send_packet(int sock, int protocol, int src_port, int dst_port, char dest_ip
 
 
         // char jsonSubmit[99999];
-        sprintf(jsonSubmit, "{\"tableName\": \"packet_sent\", \"seq\": %d, \"data\": \"%s\", \"packet\": \"%s\", \"time\": \"%s\"}", htonl(seq), toBinaryString((void *) message, strlen(message)), toBinaryString((void *) &tBufferPacket, packetsize), getTimestamp());
+        sprintf(jsonSubmit, "{\"tableName\": \"packet_sent\", \"seq\": %u, \"data\": \"%s\", \"packet\": \"%s\", \"time\": \"%s\"}", seq, toBinaryString((void *) message, strlen(message)), toBinaryString((void *) &tBufferPacket, packetsize), getTimestamp());
         async_db_put((void *) jsonSubmit, 1);
 
         if (success < 0)
@@ -326,7 +327,7 @@ int send_data(int sock, int protocol, int port, char dest_ip[IPV4STR_MAX_LEN], c
     // printf("\n");
     struct sockaddr_in serv_addr;
     struct rsock_packet recv_packet;
-    socklen_t len = sizeof(serv_addr);
+    // socklen_t len = sizeof(serv_addr);
     int ifavl;
     char* finalMsg;
     char debugText[100];
@@ -363,10 +364,10 @@ int send_data(int sock, int protocol, int port, char dest_ip[IPV4STR_MAX_LEN], c
 
         //add ip and port to prepare listen for packet
         // struct packet_hint_pointers;
-        finalMsg = (char *)malloc(147483647 /* padding */);
+        finalMsg = (char *)malloc(147483647); 
         int i;
         for(i=0; i < MAX_CONNECTIONS; i++){
-            if(focusedAddrses[i].flag == 0) {
+            if(focusedAddrses[i].flag == 0 || focusedAddrses[i].flag == 404) {
 
                 struct packet_hint_pointers buffer = {dest_ip, port, source_ip, ntohs(serv_addr.sin_port), &recv_packet, 1, sock, finalMsg};
                 focusedAddrses[i] = buffer;
@@ -382,14 +383,13 @@ int send_data(int sock, int protocol, int port, char dest_ip[IPV4STR_MAX_LEN], c
         }
         if(i == -1) {
             if(1){
-                sprintf(debugText, "connection full (%d), please close some connection or wait and try again", MAX_CONNECTIONS);
-                print_progressBar(debugText, 100);
+                print_progressBar("connection full (%d), please close some connection or wait and try again", 100);
             }
             // printf("connection full (%d), please close some connection or wait and try again", MAX_CONNECTIONS);
             return -1;
         }
 
-        uint32_t seq = rand() % 100000;
+        uint32_t seq = rand() % 1000000000;
         uint32_t ack_seq = 0;
         char tcpOptions[50];
 
@@ -397,8 +397,7 @@ int send_data(int sock, int protocol, int port, char dest_ip[IPV4STR_MAX_LEN], c
          * First Packet  ------
          */
         if(1){
-            sprintf(debugText, "initiating tcp handshake................");
-            print_progressBar(debugText, 20);
+            print_progressBar("initiating tcp handshake................", 20);
         }
         memset(&tcpOptions, '\0', 50);
         sprintf(tcpOptions, "s\t%d\t%d\t", seq, ack_seq);
@@ -408,58 +407,35 @@ int send_data(int sock, int protocol, int port, char dest_ip[IPV4STR_MAX_LEN], c
          * Recieve Packet  ------
          */        
         if(1){
-            sprintf(debugText, "waiting response................");
-            print_progressBar(debugText, 25);
+            print_progressBar("waiting response................", 25);
         }
+
         while(focusedAddrses[i].flag == 1) msleep(100); //wait for packet
 
         if(recv_packet.tcp->syn == 1 && recv_packet.tcp->ack == 1){
             // printf("recieved !! -----------------------------------------------  \n");        
             if(1){
                 
-                sprintf(debugText, "recieved!! -- finished 3-way handshake -> sending actual request");
-                print_progressBar(debugText, 30);
+                print_progressBar("recieved!! -- finished 3-way handshake -> sending actual request", 30);
             }
         }else if(recv_packet.tcp->rst == 1){
             if(1){
-                sprintf(debugText, "acknoledge skipped || lost packet || error in ip");
-                print_progressBar(debugText, 100);
+                print_progressBar("acknoledge skipped || lost packet || error in ip", 100);
             }
-            // printf("acknoledge skipped || lost packet || error in ip");
             return -1;
         }else{
             if(1){
                 
-                sprintf(debugText, "unkown flag condition!!");
-                print_progressBar(debugText, 100);
+                print_progressBar("unkown flag condition!!", 100);
             }
-            // printf("unkown flag condition!!");
             return -1;
         }
-        
-
-        // /** 
-        //  * Second Packet  ------
-        //  */
-        // seq = ntohl(recv_packet.tcp->ack_seq);
-        // ack_seq = ntohl(recv_packet.tcp->seq) + 1; //add one for the syn flag
-
-        // memset(&tcpOptions, '\0', 50);
-        // sprintf(tcpOptions, "a\t%d\t%d\t", seq, ack_seq);
-        // send_packet(sock, protocol, ntohs(serv_addr.sin_port), port, dest_ip, "", tcpOptions);
-
-        //finish 3-way handshake
 
         /** 
          * Third Packet  ------
          */
         seq = ntohl(recv_packet.tcp->ack_seq);
         ack_seq = ntohl(recv_packet.tcp->seq) + 1; //add one for the syn flag
-
-
-        // memset(&tcpOptions, '\0', 50);
-        // sprintf(tcpOptions, "a\t%d\t%d\t", seq, ack_seq);
-        // send_packet(sock, protocol, ntohs(serv_addr.sin_port), port, dest_ip, "", tcpOptions);
 
 
         memset(&tcpOptions, '\0', 50);
@@ -473,8 +449,7 @@ int send_data(int sock, int protocol, int port, char dest_ip[IPV4STR_MAX_LEN], c
          * Recieve Packet  ------
          */
         if(1){
-            sprintf(debugText, "waiting for whole data and fin bit...");
-            print_progressBar(debugText, 70);
+            print_progressBar("waiting for whole data and fin bit...", 70);
         }
 
         while(focusedAddrses[i].flag != 404) {
@@ -521,6 +496,7 @@ int send_data(int sock, int protocol, int port, char dest_ip[IPV4STR_MAX_LEN], c
     case 217:
         break;
     }
+    return -1;
 }
 
 
@@ -569,7 +545,7 @@ char* getLocalIp_s(char* device){
     strncpy(deviceName, device, strlen(device)+1);
 
     struct ifaddrs *ifaddr, *ifa;
-    int family, s;
+    int s;
     static char host[NI_MAXHOST];
 
     if (getifaddrs(&ifaddr) == -1) 
@@ -610,22 +586,22 @@ void *pthread_handle_request(void *vargp) {
     int clientPort = hints->src_port;
 
 
-    struct sockaddr_in serv_addr;
+    // struct sockaddr_in serv_addr;
     struct rsock_packet recv_packet;
-    socklen_t len = sizeof(serv_addr);
-    char* finalMsg;
+    // socklen_t len = sizeof(serv_addr);
+    char* finalMsg = malloc(99999);
     char tcpOptions[50];
     char debugText[100];
 
-    uint32_t seq = rand() % 100000;
-    uint32_t ack_seq = hints->pTargetSet->tcp->seq + 1;
+    uint32_t seq = rand() % 1000000000;
+    uint32_t ack_seq = ntohl(hints->pTargetSet->tcp->seq) + 1;
 
 
     int sock = init_socket();
     //set recieve packet
     int i;
     for(i=0; i < MAX_CONNECTIONS; i++){
-        if(focusedAddrses[i].flag == 0) {
+        if(focusedAddrses[i].flag == 0 || focusedAddrses[i].flag == 404) {
 
             struct packet_hint_pointers buffer = {hints->pSrcIpAddr, hints->src_port, hints->pDestIpAddr, hints->dest_port, &recv_packet, 1, sock, finalMsg};
             focusedAddrses[i] = buffer;
@@ -642,8 +618,7 @@ void *pthread_handle_request(void *vargp) {
     if(i == -1) {
         if(1){
             
-            sprintf(debugText, "connection full (%d), please close some connection or wait and try again", MAX_CONNECTIONS);
-            print_progressBar(debugText, 100);
+            print_progressBar( "connection full (%d), please close some connection or wait and try again", 100);
         }
         // printf("connection full (%d), please close some connection or wait and try again", MAX_CONNECTIONS);        
         memset(&tcpOptions, '\0', 50);
@@ -659,35 +634,30 @@ void *pthread_handle_request(void *vargp) {
 
     if(1){
         
-        sprintf(debugText, "sent syn + ack packet");
-        print_progressBar(debugText, 20);
+        print_progressBar("sent syn + ack packet", 20);
     }
 
     //get psh ack and parse data
     while(focusedAddrses[i].flag == 1) msleep(100); //wait for packet
 
-    // printf("%s\n", DebugTcpHeader(recv_packet.tcp));
+    printf("%s\n", DebugTcpHeader(recv_packet.tcp));
 
     if(recv_packet.tcp->psh == 1 && recv_packet.tcp->ack == 1){
         // printf("recieved !! -----------------------------------------------  \n");        
         if(1){
-            
-            sprintf(debugText, "recieved request details--");
-            print_progressBar(debugText, 30);
+            print_progressBar("recieved request details--", 30);
         }
     }else if(recv_packet.tcp->rst == 1){
         if(1){
             
-            sprintf(debugText, "acknoledge skipped || lost packet || error in ip");
-            print_progressBar(debugText, 100);
+            print_progressBar("acknoledge skipped || lost packet || error in ip", 100);
         }
         // printf("acknoledge skipped || lost packet || error in ip");
         return NULL;
     }else{
         if(1){
             
-            sprintf(debugText, "unkown flag condition!!");
-            print_progressBar(debugText, 100);
+            print_progressBar("unkown flag condition!!", 100);
         }
         // printf("unkown flag condition!!");
         return NULL;
@@ -699,14 +669,8 @@ void *pthread_handle_request(void *vargp) {
     ack_seq = ntohl(recv_packet.tcp->seq) + 1; //add one for the syn flag
     memset(&tcpOptions, '\0', 50);
     sprintf(tcpOptions, "a\t%d\t%d\t", seq, ack_seq);
-    send_packet(sock, 6, 8900, clientPort, ipAddr, "\
-HTTP/1.1 200 OK\r\n\
-Server: SpeedstorServer/0.0.1\r\n\
-Content-Length: 35\r\n\
-Connection: close\r\n\
-Content-Type: text/html\r\n\
-\r\n\
-<h1>My Home page</h1>", tcpOptions);
+    send_packet(sock, 6, 8900, clientPort, ipAddr, "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Velit laoreet id donec ultrices tincidunt arcu. Sollicitudin aliquam ultrices sagittis orci a scelerisque purus semper. A condimentum vitae sapien pellentesque. Amet cursus sit amet dictum sit. Venenatis tellus in metus vulputate eu scelerisque felis imperdiet. Lectus sit amet est placerat in. Nisl suscipit adipiscing bibendum est."
+        , tcpOptions);
 
     //fin, psh, ack
     memset(&tcpOptions, '\0', 50);
@@ -715,10 +679,10 @@ Content-Type: text/html\r\n\
     
     if(1){
         
-        sprintf(debugText, "Finished, sent data");
-        print_progressBar(debugText, 100);
+        print_progressBar("Finished, sent data", 100);
     }
     
-    focusedAddrses[i].flag = 0;
+    // focusedAddrses[i].flag = 0;
     end_progressBar(0);
+    return NULL;
 }

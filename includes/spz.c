@@ -29,14 +29,14 @@ struct Timestamp
 char* getTimestamp()
 {
     char   timebuffer[32]     = {0};
-    struct timeval  tv        = {0};
+    // struct timeval  tv        = {0};
     struct tm      *tmval     = NULL;
     struct tm       gmtval    = {0};
     struct timespec curtime   = {0};
 
     struct Timestamp timestamp;
 
-    int i = 0;
+    // int i = 0;
 
     // Get current time
     clock_gettime(CLOCK_REALTIME, &curtime);
@@ -118,20 +118,11 @@ void refresh_progressBar(){
     }
 }
 void print_progressBar(char* text, int percentage){
-    if(lastProgressText != NULL){
-        for(int i = 0; i < strlen(lastProgressText); i++){
-            printf("\b");
-        }
-    }
 
 
-    struct winsize w;
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-
-
-    char copyText[42];
-    memset(&copyText, '\0', 42);
-    strncpy(copyText, text, 41);
+    // char copyText[42];
+    // // memset(&copyText, '\0', 42);
+    // strncpy(copyText, text, 41);
 
     char progressBar[36];
     memset(&progressBar+35, '\0', 1);
@@ -144,13 +135,13 @@ void print_progressBar(char* text, int percentage){
         }
     }
 
-    int i;
-    for(i = 0; i < STATUS_BUFFER_MAX; i++){
-        if(statusBuffer[i] == NULL){
-            statusBuffer[i] = text;
-            break;
-        } 
-    }
+    int i = 1;
+    // for(i = 0; i < STATUS_BUFFER_MAX; i++){
+    //     if(statusBuffer[i] == NULL){
+    //         statusBuffer[i] = text;
+    //         break;
+    //     } 
+    // }
 
     char progressText[400];
     sprintf(progressText, "\
@@ -159,10 +150,9 @@ ____________________________________________________\n\
    > %s\n\
   [%s] |%d %d%%|\n\
 ____________________________________________________\n\n\
-", copyText, progressBar, i, percentage);
+", text, progressBar, i, percentage);
 
     printf("%s", progressText);
-    lastProgressText = progressText;
 }
 void end_progressBar(int status){
     switch(status){

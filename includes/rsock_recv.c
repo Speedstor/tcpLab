@@ -34,8 +34,8 @@ struct rsock_packet{
 	};
 
 	int payload_len;
-	char* payload;
-	char* pPacket;
+	unsigned char* payload;
+	unsigned char* pPacket;
 };
 
 struct rsock_packet* recievePacket(int sock_r){
@@ -87,7 +87,7 @@ struct rsock_packet* recievePacket(int sock_r){
 			//tcp
 			tcp = (struct tcphdr*)( buffer + iphdrlen + sizeof(struct ethhdr));
 
-			data = (char *) (buffer + iphdrlen  + sizeof(struct ethhdr) + tcp->doff * 4);
+			data = (unsigned char *) (buffer + iphdrlen  + sizeof(struct ethhdr) + tcp->doff * 4);
 			remaining_data_len = ntohs(ip->tot_len) - (ip->ihl<<2) - (tcp->doff * 4);
 			// remaining_data_len = buflen - (iphdrlen + sizeof(struct ethhdr) + tcp->doff * 4);
 
@@ -120,8 +120,8 @@ struct rsock_packet* recievePacket(int sock_r){
 
 	returnVar -> pPacket = buffer;
 
+	// printf("\n");
 	return returnVar;
-	printf("\n");
 	//TODO: make remaining data
 
 }
@@ -141,6 +141,7 @@ char* FileToString(char* path){
 		fclose(buffer_txt);
 		return returnString;
 	}
+	return NULL;
 }
 
 char* DebugEthernetHeader(struct ethhdr *eth){

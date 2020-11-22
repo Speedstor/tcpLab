@@ -1,4 +1,5 @@
 
+// #include <signal.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <getopt.h>
@@ -31,7 +32,6 @@
 #include "./includes/rsockHelper.h"
 #include "./includes/post.h"
 
-#pragma region redunt defines
 #ifndef NON_STANDARD_CONSTANTS
 #define NON_STANDARD_CONSTANTS
     #define IPV4STR_MAX_LEN 15
@@ -61,7 +61,6 @@
     char source_ip[IPV4STR_MAX_LEN];
     struct packet_hint_pointers focusedAddrses[MAX_CONNECTIONS];
 #endif
-#pragma endregion
 
 void usage()
 {
@@ -96,21 +95,11 @@ char dest_ip[IPV4STR_MAX_LEN] = "127.0.0.1";
 char network_interface[NETWORK_INTERFACE_MAX_LEN] = "wlp1s0";
 // char network_interface[NETWORK_INTERFACE_MAX_LEN] = "ens33";
 char message[PAYLOAD_MAX_LEN] = "Speedstor -- default text message";
-// char message[PAYLOAD_MAX_LEN] = "GET / HTTP/1.1\n\n";
-// char message[PAYLOAD_MAX_LEN] = "GET / HTTP/1.1\r\n\
-// Host: http.speedstor.net\r\n\
-// Connection: keep-alive\r\n\
-// DNT: 1\r\n\
-// Upgrade-Insecure-Requests: 1\r\n\
-// User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.105 Safari/537.36\r\n\
-// Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9\r\n\
-// Accept-Encoding: gzip, deflate\r\n\
-// Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7\r\n\
-// Cookie: __gads=ID=b21cd87e824060dd:T=1597105303:S=ALNI_Ma7MUj_bCk7f2XQl5lKLn5hCr4CwA; PHPSESSID=ago5ba2ap16499sunnhfsu0f4h\r\n\r\n\
-// ";
 
 //global variables
 int sock;
+pthread_t cycle_thread;
+int cycle_running = 0;
 
 int main(int argc, char **argv) {
     // sudo iptables -A OUTPUT -p tcp --tcp-flags RST RST -j DROP //required !!!!
@@ -187,6 +176,24 @@ int main(int argc, char **argv) {
            port, send_mode, recieve_mode, dest_ip, network_interface, source_ip, (int)strlen(message), message);
     //END: finish setting up ---------------------------------------------------------------------------------------------
 
+    //for clean debugging database
+	// FILE* dbFile;
+    // dbFile = fopen("tcpDB_sent.txt", "w");
+	// if(!dbFile) {
+	// 	printf("unable to open buffer file:: error");
+	// }else{
+	// //   fprintf(dbFile, "\n");
+    // }
+    // fclose(dbFile);
+    // dbFile = fopen("tcpDB_recieve.txt", "w");
+	// if(!dbFile) {
+	// 	printf("unable to open buffer file:: error");
+	// }else{
+	// //   fprintf(dbFile, "\n");
+    // }
+    // fclose(dbFile);
+
+
     //body of the program
     pthread_t commandThread_id;
     pthread_create(&commandThread_id, NULL, commandThread, NULL);
@@ -205,12 +212,13 @@ int main(int argc, char **argv) {
             printf("socket opened fine\n");
         }
 
+        char ipAddr[IPV4STR_MAX_LEN];
         while(1){
-            struct rsock_packet* recieve = recievePacket(sock_r);
+            struct rsock_packet* recieve;
+            recieve = recievePacket(sock_r);
             
             if(strcmp(source_ip, inet_ntoa((recieve->dest).sin_addr)) == 0 && htons(recieve->tcp->dest) == port && recieve->tcp->syn == 1) {
                 printf("%s\n", DebugTcpHeader(recieve->tcp));
-                char ipAddr[IPV4STR_MAX_LEN];
                 strncpy(ipAddr, inet_ntoa((recieve->source).sin_addr), IPV4STR_MAX_LEN);
                 struct packet_hint_pointers hints = {(char*) &ipAddr, ntohs(recieve->tcp->source), source_ip, port, recieve};
                 pthread_t requestHandlerThread_id;
@@ -224,6 +232,8 @@ int main(int argc, char **argv) {
                 sprintf(jsonSubmit, "{\"tableName\": \"packet_recieve\", \"ifAuto\": true, \"seq\": %d, \"data\": \"%s\", \"packet\": \"%s\", \"time\": \"%s\"}", ntohl(recieve->tcp->seq), payloadBinSeq, packetBinSeq, getTimestamp());
                 async_db_put((void *) jsonSubmit, 2);
             }
+
+	    free(recieve);
         }
     }
     else
@@ -262,8 +272,27 @@ void commandUsage()
    _\t   send w/ default set paramter\n\
    msg [s/f]\t   set message from string or from file, the follow up param is the input\n\
    dest [arg]]\t   set the destination ip to send to\n\
+   periodic\t   send request for data every 5 seconds\n\
 ");
     }
+}
+
+void *pthread_send(void *vargp){
+    send_data(sock, 6, port, dest_ip, message);
+    return NULL;
+}
+
+
+void *pthread_cycle_send(void *vargp){
+    
+    pthread_t send_thread;
+    while(cycle_running == 1){
+        pthread_create(&send_thread,0,pthread_send, NULL);
+        pthread_join(send_thread, 0);
+        sleep(2);
+    }
+    cycle_running = 0;
+    return NULL;
 }
 
 void *commandThread(void *vargp)
@@ -280,7 +309,7 @@ void *commandThread(void *vargp)
             memset(pParam, '\0', 1);
         }
         //gets(command);
-        if (strcmp(command, "") == 0 || strcmp(command, "_") == 0)
+        if (strcmp(command, "") == 0 || strcmp(command, "_") == 0 || strcmp(command, "send") == 0)
         {
             if (pParam != NULL)
             {
@@ -355,6 +384,19 @@ void *commandThread(void *vargp)
         {
             abort();
         }
+        else if (strcmp(command, "periodic") == 0) {
+            if(cycle_running == 0){
+                cycle_running = 1;
+                printf("starting thread to send request--");
+                pthread_create(&cycle_thread, NULL, pthread_cycle_send, NULL);
+            }else{
+                printf("A thread is already running and sending requests\n");
+            }
+        }
+        else if (strcmp(command, "endPeriodic") == 0){
+            cycle_running = 0;
+            printf("ending thread that send requests--\n");
+        }
         else
         {
             printf("Invalid Command.\n");
@@ -369,14 +411,15 @@ void* pthread_raw_recv(void *vargp){
 
 	int sock_r = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
 	if(sock_r < 0) {
-		printf("error in opening socket !!\n");
+		printf("error in opening socket !!!\n");
 		return NULL;
 	}else {
         // printf("socket opened fine\n");
     }
 
 	while(1){
-		struct rsock_packet* recieve = recievePacket(sock_r);
+        struct rsock_packet* recieve; 
+		recieve = recievePacket(sock_r);
 
         if(recieve->protocol != 6) continue;
         for(int i=0; i < MAX_CONNECTIONS; i++){
@@ -397,65 +440,68 @@ void* pthread_raw_recv(void *vargp){
                         int msgLen = recieve->payload_len;
                         if(recieve->tcp->syn == 1) msgLen++;
 
-                        int seq = ntohl(recieve->tcp->ack_seq);
-                        int ack_seq = ntohl(recieve->tcp->seq) + msgLen; //add one for the syn flag
+                        uint32_t seq = ntohl(recieve->tcp->ack_seq);
+                        uint32_t ack_seq = ntohl(recieve->tcp->seq) + msgLen; //add one for the syn flag
 
                         char tcpOptions[50];
                         memset(&tcpOptions, '\0', 50);
-                        sprintf(tcpOptions, "a\t%d\t%d\t", seq, ack_seq);
+                        sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
                         send_packet(focusedAddrses[i].sock, 6, focusedAddrses[i].dest_port, htons(recieve->tcp->source), srcIp, "", tcpOptions);
                     }
 
                     //ending packet
                     if(recieve->protocol == 6){
-                        if(recieve->tcp->fin == 1 && send_mode == 1){
-                            int msgLen = recieve->payload_len;
-                            if(recieve->tcp->syn == 1) msgLen++;
+                        if(recieve->tcp->fin == 1){
+                            if(send_mode == 1){
+                                int msgLen = recieve->payload_len;
+                                if(recieve->tcp->syn == 1) msgLen++;
 
-                            int seq = ntohl(recieve->tcp->ack_seq);
-                            int ack_seq = ntohl(recieve->tcp->seq) + msgLen + 1; //add one for the syn flag
+                                uint32_t seq = ntohl(recieve->tcp->ack_seq);
+                                uint32_t ack_seq = ntohl(recieve->tcp->seq) + msgLen + 1; //add one for the syn flag
 
-                            char tcpOptions[50];
-                            memset(&tcpOptions, '\0', 50);
-                            sprintf(tcpOptions, "a\t%d\t%d\t", seq, ack_seq);
-                            send_packet(focusedAddrses[i].sock, 6, focusedAddrses[i].dest_port, htons(recieve->tcp->source), srcIp, "", tcpOptions);
+                                char tcpOptions[50];
+                                memset(&tcpOptions, '\0', 50);
+                                sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
+                                send_packet(focusedAddrses[i].sock, 6, focusedAddrses[i].dest_port, htons(recieve->tcp->source), srcIp, "", tcpOptions);
 
-                            memset(&tcpOptions, '\0', 50);
-                            sprintf(tcpOptions, "f\t%d\t%d\t", seq, ack_seq);
-                            send_packet(focusedAddrses[i].sock, 6, focusedAddrses[i].dest_port, htons(recieve->tcp->source), srcIp, "", tcpOptions);
+                                memset(&tcpOptions, '\0', 50);
+                                sprintf(tcpOptions, "f\t%u\t%u\t", seq, ack_seq);
+                                send_packet(focusedAddrses[i].sock, 6, focusedAddrses[i].dest_port, htons(recieve->tcp->source), srcIp, "", tcpOptions);
+                            }
 
-                            focusedAddrses[i].flag = 404;
+                            focusedAddrses[i].flag = 404; //404 waiting for acknowledge fin bit
                         }
                     }
 
                     //TODO: find index and update database
                     
                     if(recieve->payload_len > 0 && focusedAddrses[i].msg != NULL) {
-                        strncpy(focusedAddrses[i].msg + strlen(focusedAddrses[i].msg), recieve->payload, recieve->payload_len);
-                    }
-
-                    if(focusedAddrses[i].flag == 1){
-                        focusedAddrses[i].flag = 2;
-                    }else if(focusedAddrses[i].flag == 404){
-                        
-                    }else{
-                        focusedAddrses[i].flag = 3;
+                        strncpy(focusedAddrses[i].msg + strlen(focusedAddrses[i].msg), (char *) recieve->payload, recieve->payload_len);
                     }
 
                     if((recieve->payload_len > 0 || recieve->tcp->psh == 1 || recieve->tcp->syn == 1 || recieve->tcp->fin == 1 || recieve->tcp->rst == 1) && !(recieve->tcp->syn == 1 && recieve->tcp->ack == 0)){
                         *focusedAddrses[i].pTargetSet = *recieve;
+                        if(focusedAddrses[i].flag == 1){
+                            focusedAddrses[i].flag = 2;
+                        }else if(focusedAddrses[i].flag == 404){
+                            
+                        }else{
+                            focusedAddrses[i].flag = 3;
+                        }
                     }
 
                     
                     // memset(recieve->pPacket + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct tcphdr) + recieve->payload_len + 1, '\0', 1);
-                    char* packetBinSeq = toBinaryString((void *)recieve->pPacket,  sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct tcphdr) + recieve->payload_len);
+                    char* packetBinSeq = toBinaryString((void *)recieve->pPacket + sizeof(struct ethhdr),  sizeof(struct iphdr) + sizeof(struct tcphdr) + recieve->payload_len);
                     // memset(recieve->payload+recieve->payload_len+1, '\0', 1);
                     char* payloadBinSeq = toBinaryString((void *) recieve->payload, recieve->payload_len);
 
-                    sprintf(jsonSubmit, "{\"tableName\": \"packet_recieve\", \"ifAuto\": true, \"seq\": %d, \"data\": \"%s\", \"packet\": \"%s\", \"time\": \"%s\"}", ntohl(recieve->tcp->seq), payloadBinSeq, packetBinSeq, getTimestamp());
+                    sprintf(jsonSubmit, "{\"tableName\": \"packet_recieve\", \"ifAuto\": true, \"seq\": %u, \"data\": \"%s\", \"packet\": \"%s\", \"time\": \"%s\"}", ntohl(recieve->tcp->seq), payloadBinSeq, packetBinSeq, getTimestamp());
                     async_db_put((void *) jsonSubmit, 2);
                 }
             }
         }
+
+	    free(recieve);
     }
 }

@@ -60,8 +60,8 @@
         };
 
         int payload_len;
-        char* payload;
-	    char* pPacket;
+        unsigned char* payload;
+	    unsigned char* pPacket;
     };
 #endif
 
