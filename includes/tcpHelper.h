@@ -11,6 +11,7 @@
 
 #ifndef TCP_HELPER_H
 #define TCP_HELPER_H
-    unsigned short compute_tcp_checksum(struct iphdr *pIph, unsigned short *ipPayload);
     unsigned short validate_tcp_checksum(struct iphdr *pIph, unsigned short *ipPayload);
+    unsigned short compute_tcp_checksum(struct iphdr *pIph, unsigned short *ipPayload);
+    unsigned short compute_tcpcrc_checksum(struct iphdr *pIph, unsigned short *ipPayload);
 #endif
