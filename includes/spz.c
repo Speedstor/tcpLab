@@ -46,7 +46,6 @@ char* getTimestamp()
     timestamp.seconds      = curtime.tv_sec;
     timestamp.milliseconds = round(curtime.tv_nsec/1.0e6);
 
-
     char* returnString = malloc(32);
 
     if((tmval = gmtime_r(&timestamp.seconds, &gmtval)) != NULL)

@@ -2,7 +2,4 @@ tcpLab: tcp_ip_tester.c ./includes/rsock_recv.c ./includes/tcpHelper.c ./include
 	gcc -o $@ -Wall $^ -lpthread
 
 tcpLabDebug: tcp_ip_tester.c ./includes/rsock_recv.c ./includes/tcpHelper.c ./includes/rsockHelper.c ./includes/spz.c ./includes/post.c -lm
-	gcc -o $@ $^ -lpthread
-
-tcpLabRecieve: tcp_ip_tester.c ./includes/rsock_recv.c ./includes/tcpHelper.c ./includes/rsockHelper.c ./includes/spz.c ./includes/post.c -lm
-	gcc -o $@ $^ -lpthread
+	gcc -o $@ $^ -g -lpthread

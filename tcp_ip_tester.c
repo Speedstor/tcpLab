@@ -71,7 +71,9 @@ void usage()
   -P\t     destination port number (default: 8900)\n\
   -s\t     source ip IPv4 address (default: <from chosen device>)\n\
   -d\t     destination ip IPv4 address (default: 127.0.0.1)\n\
-  -i\t     network interface card that is going to be used (default*: wlp1s0)\n"); //* means should be, for debugging it is actually ens33
+  -i\t     network interface card that is going to be used (default*: wlp1s0)\n\
+  -m\t     message, payload of the data that going to be sent\n\
+  -p\t     default protocol to send data\n"); //* means should be, for debugging it is actually ens33
 }
 
 int send_mode = 1, recieve_mode = 0;
@@ -89,6 +91,7 @@ char jsonSubmit[99999];
 
 //default options
 int port = 8900;
+int protocol = 6; //default tcp
 int src_port = 0; // 0 means auto
 char dest_ip[IPV4STR_MAX_LEN] = "127.0.0.1";
 
@@ -117,16 +120,16 @@ int main(int argc, char **argv) {
     while (1)
     {
         int optionIndex = 0;
-        c = getopt_long(argc, argv, "rSRP:s:d:p:i:h", NULL, &optionIndex);
+        c = getopt_long(argc, argv, "rSRP:s:d:p:i:h:m", NULL, &optionIndex);
         if (c == -1)
             break;
 
         switch (c)
         {
-        case 'd':
+        case 'd': //destination ip
             strncpy(dest_ip, optarg, IPV4STR_MAX_LEN);
             break;
-        case 'P':
+        case 'P': //port
             port = strtol(optarg, NULL, 10);
             if (port == 0)
             {
@@ -134,65 +137,56 @@ int main(int argc, char **argv) {
                 return -1;
             }
             break;
-        case 's':
+        case 's': //source ip
             strncpy(source_ip, optarg, IPV4STR_MAX_LEN);
             break;
-        case 'p':
+        case 'm': ///message, payload
             strncpy(message, optarg, PAYLOAD_MAX_LEN);
             break;
-        case 'i':
+        case 'i': //network interface card
             strncpy(network_interface, optarg, NETWORK_INTERFACE_MAX_LEN);
             break;
-        case 'S':
+        case 'S': //send mode
             send_mode = 1;
             recieve_mode = 0;
             break;
-        case 'R':
+        case 'R': //recieve mode
             recieve_mode = 1;
             send_mode = 0;
             break;
-        case '?':
+        case 'p': //default protocol that is going to be used
+            protocol = strtol(optarg, NULL, 10);
+            if (protocol != 6 && protocol != 17 && protocol != 206 && protocol != 207) {
+                printf("Invalid protocol: %d\n Valid protocols: 6(tcp), 17(udp), 206(custom_tcp), 217(custom_udp)\n", port);
+                return -1;
+            }
+            break;
+        case '?': //help
         case 'h':
             usage();
             return -1;
         default:
-            printf("error");
+            printf("error: the parameter that is given have error");
             return -1;
         }
     }
     
+    //get sourceip and store in global variable
     if(strcmp(source_ip, "") == 0){
         char* pSourceIp = getLocalIp_s(network_interface);
         strncpy(source_ip, pSourceIp, strlen(pSourceIp) + 1);
     }
 
+    //output the default variables that are set
     printf("\n--- Tcp Lab (send custom udp/mostly tcp socket) ------------------------------------------------------------------\n\
    \n\
    Startup Params:  port: %d | send_mode: %d | recieve_mode: %d | dest ip: %s | \n\
-                     net interface: %s | source ip: %s \n\
+                     net interface: %s | source ip: %s | protocol: %d\n\
                      message[%d]: %s\n\
 \n\
 -----------------------------------------------------------------------------------------------------------\n\n\n",
-           port, send_mode, recieve_mode, dest_ip, network_interface, source_ip, (int)strlen(message), message);
+           port, send_mode, recieve_mode, dest_ip, network_interface, source_ip, (int)strlen(message), protocol, message);
     //END: finish setting up ---------------------------------------------------------------------------------------------
-
-    //for clean debugging database
-	// FILE* dbFile;
-    // dbFile = fopen("tcpDB_sent.txt", "w");
-	// if(!dbFile) {
-	// 	printf("unable to open buffer file:: error");
-	// }else{
-	// //   fprintf(dbFile, "\n");
-    // }
-    // fclose(dbFile);
-    // dbFile = fopen("tcpDB_recieve.txt", "w");
-	// if(!dbFile) {
-	// 	printf("unable to open buffer file:: error");
-	// }else{
-	// //   fprintf(dbFile, "\n");
-    // }
-    // fclose(dbFile);
-
 
     //body of the program
     pthread_t commandThread_id;
@@ -218,22 +212,32 @@ int main(int argc, char **argv) {
             recieve = recievePacket(sock_r);
             
             if(strcmp(source_ip, inet_ntoa((recieve->dest).sin_addr)) == 0 && htons(recieve->tcp->dest) == port && recieve->tcp->syn == 1) {
-                printf("%s\n", DebugTcpHeader(recieve->tcp));
+                //print debug text
+                char* debugText = DebugTcpHeader(recieve->tcp); 
+                printf("%s\n", debugText);
+                free(debugText);
+
+                //record it to the packets to be looking out for
                 strncpy(ipAddr, inet_ntoa((recieve->source).sin_addr), IPV4STR_MAX_LEN);
                 struct packet_hint_pointers hints = {(char*) &ipAddr, ntohs(recieve->tcp->source), source_ip, port, recieve};
                 pthread_t requestHandlerThread_id;
                 pthread_create(&requestHandlerThread_id, NULL, pthread_handle_request, (void *) &hints);
-                
-                // memset(recieve->pPacket + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct tcphdr) + recieve->payload_len + 1, '\0', 1);
+
+                //record packet into database
                 char* packetBinSeq = toBinaryString((void *)recieve->pPacket,  sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct tcphdr) + recieve->payload_len);
-                // memset(recieve->payload+recieve->payload_len+1, '\0', 1);
                 char* payloadBinSeq = toBinaryString((void *) recieve->payload, recieve->payload_len);
+                char* timestamp = getTimestamp();
 
-                sprintf(jsonSubmit, "{\"tableName\": \"packet_recieve\", \"ifAuto\": true, \"seq\": %d, \"data\": \"%s\", \"packet\": \"%s\", \"time\": \"%s\"}", ntohl(recieve->tcp->seq), payloadBinSeq, packetBinSeq, getTimestamp());
+                sprintf(jsonSubmit, "{\"tableName\": \"packet_recieve\", \"ifAuto\": true, \"seq\": %d, \"data\": \"%s\", \"packet\": \"%s\", \"time\": \"%s\"}", ntohl(recieve->tcp->seq), payloadBinSeq, packetBinSeq, timestamp);
                 async_db_put((void *) jsonSubmit, 2);
+                
+                free(packetBinSeq);
+                free(payloadBinSeq);
+                free(timestamp);
+            }else{
+                free(recieve->pPacket);
+                free(recieve);
             }
-
-	    free(recieve);
         }
     }
     else
@@ -255,10 +259,14 @@ int main(int argc, char **argv) {
 
 void printSettings()
 {
-    printf("\
-   Settings:  port: %d | send_mode: %d | recieve_mode: %d | dest ip: %s\n\
-               message[%d]: %s\n",
-           port, send_mode, recieve_mode, dest_ip, (int)strlen(message), message);
+    printf("\n--- Tcp Lab (send custom udp/mostly tcp socket) ------------------------------------------------------------------\n\
+   \n\
+   Startup Params:  port: %d | send_mode: %d | recieve_mode: %d | dest ip: %s | \n\
+                     net interface: %s | source ip: %s \n\
+                     message[%d]: %s\n\
+\n\
+-----------------------------------------------------------------------------------------------------------\n\n\n",
+           port, send_mode, recieve_mode, dest_ip, network_interface, source_ip, (int)strlen(message), message);
 }
 
 void commandUsage()
@@ -273,6 +281,7 @@ void commandUsage()
    msg [s/f]\t   set message from string or from file, the follow up param is the input\n\
    dest [arg]]\t   set the destination ip to send to\n\
    periodic\t   send request for data every 5 seconds\n\
+   emptyDB\t   empty the database that records the packets\n\
 ");
     }
 }
@@ -282,12 +291,10 @@ void *pthread_send(void *vargp){
     return NULL;
 }
 
-
 void *pthread_cycle_send(void *vargp){
-    
     pthread_t send_thread;
     while(cycle_running == 1){
-        pthread_create(&send_thread,0,pthread_send, NULL);
+        pthread_create(&send_thread, 0, pthread_send, NULL);
         pthread_join(send_thread, 0);
         sleep(2);
     }
@@ -300,15 +307,12 @@ void *commandThread(void *vargp)
     char command[100];
     while (1)
     {
-        //memset(&command, '\0', 100);
         fgets(command, 100, stdin);
         command[strcspn(command, "\n")] = '\0';
         char *pParam = strchr(command, ' ');
-        if (pParam != NULL)
-        {
+        if (pParam != NULL) {
             memset(pParam, '\0', 1);
         }
-        //gets(command);
         if (strcmp(command, "") == 0 || strcmp(command, "_") == 0 || strcmp(command, "send") == 0)
         {
             if (pParam != NULL)
@@ -362,29 +366,20 @@ void *commandThread(void *vargp)
             {
                 printf("msg must need arguments | Usage: msg [s/f] [string/fileLoc]\n");
             }
-        }
-        else if (strcmp(command, "dest") == 0)
-        {
+        }else if (strcmp(command, "dest") == 0){
             if (pParam != NULL)
             {
                 memset(&dest_ip, '\0', IPV4STR_MAX_LEN);
                 strncpy(dest_ip, pParam + 1, IPV4STR_MAX_LEN);
                 printf("destination ip set to: %s\n", dest_ip);
             }
-        }
-        else if (strcmp(command, "state") == 0)
-        {
+        }else if (strcmp(command, "state") == 0){
             printSettings();
-        }
-        else if (strcmp(command, "help") == 0)
-        {
+        }else if (strcmp(command, "help") == 0){
             commandUsage();
-        }
-        else if (strcmp(command, "exit") == 0 || strcmp(command, "stop") == 0 || strcmp(command, "abort") == 0)
-        {
+        }else if (strcmp(command, "exit") == 0 || strcmp(command, "stop") == 0 || strcmp(command, "abort") == 0){
             abort();
-        }
-        else if (strcmp(command, "periodic") == 0) {
+        }else if (strcmp(command, "periodic") == 0) {
             if(cycle_running == 0){
                 cycle_running = 1;
                 printf("starting thread to send request--");
@@ -392,10 +387,27 @@ void *commandThread(void *vargp)
             }else{
                 printf("A thread is already running and sending requests\n");
             }
-        }
-        else if (strcmp(command, "endPeriodic") == 0){
+        }else if (strcmp(command, "endPeriodic") == 0){
             cycle_running = 0;
             printf("ending thread that send requests--\n");
+        }else if (strcmp(command, "emptyDB") == 0){            
+            //for clean debugging database
+            FILE* dbFile;
+            dbFile = fopen("tcpDB_sent.txt", "w");
+            if(!dbFile) {
+            	printf("unable to open buffer file:: error");
+            }else{
+            //   fprintf(dbFile, "\n");
+            }
+            fclose(dbFile);
+            dbFile = fopen("tcpDB_recieve.txt", "w");
+            if(!dbFile) {
+            	printf("unable to open buffer file:: error");
+            }else{
+            //   fprintf(dbFile, "\n");
+            }
+            fclose(dbFile);
+
         }
         else
         {
@@ -420,37 +432,42 @@ void* pthread_raw_recv(void *vargp){
 	while(1){
         struct rsock_packet* recieve; 
 		recieve = recievePacket(sock_r);
+        int savePacket = 0;
 
         if(recieve->protocol != 6) continue;
+
         for(int i=0; i < MAX_CONNECTIONS; i++){
             if(focusedAddrses[i].flag != 0 && focusedAddrses[i].flag != 404){
                 if(strcmp(focusedAddrses[i].pSrcIpAddr, inet_ntoa((recieve->source).sin_addr)) == 0 && htons(recieve->tcp->dest) == focusedAddrses[i].dest_port 
                     && htons(recieve->tcp->source) == focusedAddrses[i].src_port && strcmp(focusedAddrses[i].pDestIpAddr, inet_ntoa((recieve->dest).sin_addr)) == 0) {
 
+                    /* soruce ip variable in string */
                     char srcIp[IPV4STR_MAX_LEN];
                     strncpy(srcIp, focusedAddrses[i].pSrcIpAddr, IPV4STR_MAX_LEN);
 
-                    if(validate_tcp_checksum(&recieve->ip, (unsigned short *) recieve->tcp) != 0){
-                        printf("ERROR: !!recvieved tcp packet checksum invalid\n");
-                        // return -1;
-                    }
-
-                    //acknowledge packet
-                    if(recieve->protocol == 6 && recieve->payload_len > 0){
-                        int msgLen = recieve->payload_len;
-                        if(recieve->tcp->syn == 1) msgLen++;
-
-                        uint32_t seq = ntohl(recieve->tcp->ack_seq);
-                        uint32_t ack_seq = ntohl(recieve->tcp->seq) + msgLen; //add one for the syn flag
-
-                        char tcpOptions[50];
-                        memset(&tcpOptions, '\0', 50);
-                        sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
-                        send_packet(focusedAddrses[i].sock, 6, focusedAddrses[i].dest_port, htons(recieve->tcp->source), srcIp, "", tcpOptions);
-                    }
-
-                    //ending packet
+                    //tcp packet
                     if(recieve->protocol == 6){
+                        //checksum
+                        if(validate_tcp_checksum(&recieve->ip, (unsigned short *) recieve->tcp) != 0){
+                            printf("ERROR: !!recvieved tcp packet checksum invalid\n");
+                            // return -1;
+                        }
+                        
+                        //acknowledge packets, sync with the client
+                        if(recieve->payload_len > 0){
+                            int msgLen = recieve->payload_len;
+                            if(recieve->tcp->syn == 1) msgLen++;
+
+                            uint32_t seq = ntohl(recieve->tcp->ack_seq);
+                            uint32_t ack_seq = ntohl(recieve->tcp->seq) + msgLen; //add one for the syn flag
+
+                            char tcpOptions[50];
+                            memset(&tcpOptions, '\0', 50);
+                            sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
+                            send_packet(focusedAddrses[i].sock, 6, focusedAddrses[i].dest_port, htons(recieve->tcp->source), srcIp, "", tcpOptions);
+                        }
+
+                        //ending packet -> finish tags
                         if(recieve->tcp->fin == 1){
                             if(send_mode == 1){
                                 int msgLen = recieve->payload_len;
@@ -471,37 +488,53 @@ void* pthread_raw_recv(void *vargp){
 
                             focusedAddrses[i].flag = 404; //404 waiting for acknowledge fin bit
                         }
-                    }
 
-                    //TODO: find index and update database
-                    
-                    if(recieve->payload_len > 0 && focusedAddrses[i].msg != NULL) {
-                        strncpy(focusedAddrses[i].msg + strlen(focusedAddrses[i].msg), (char *) recieve->payload, recieve->payload_len);
-                    }
+                        //copy payload if there is any
+                        if(recieve->payload_len > 0 && focusedAddrses[i].msg != NULL) {
+                            strncpy(focusedAddrses[i].msg + strlen(focusedAddrses[i].msg), (char *) recieve->payload, recieve->payload_len);
+                        }
 
-                    if((recieve->payload_len > 0 || recieve->tcp->psh == 1 || recieve->tcp->syn == 1 || recieve->tcp->fin == 1 || recieve->tcp->rst == 1) && !(recieve->tcp->syn == 1 && recieve->tcp->ack == 0)){
-                        *focusedAddrses[i].pTargetSet = *recieve;
-                        if(focusedAddrses[i].flag == 1){
-                            focusedAddrses[i].flag = 2;
-                        }else if(focusedAddrses[i].flag == 404){
-                            
-                        }else{
-                            focusedAddrses[i].flag = 3;
+                        //packets that are not purely acknowledge, save to the focusAddrses to save
+                        if((recieve->payload_len > 0 || recieve->tcp->psh == 1 || recieve->tcp->syn == 1 || recieve->tcp->fin == 1 || recieve->tcp->rst == 1) && !(recieve->tcp->syn == 1 && recieve->tcp->ack == 0)){
+                            //set to not free the whole variable || whatever that means
+                            savePacket = 1;
+
+                            //free the previous packet
+                            if(focusedAddrses[i].flag != 1 && focusedAddrses[i].flag != 404){
+                                free(focusedAddrses[i].pTargetSet->pPacket);
+                            }
+
+                            struct rsock_packet recieveCopy = *recieve;
+                            *focusedAddrses[i].pTargetSet = recieveCopy;
+                            if(focusedAddrses[i].flag == 1){
+                                focusedAddrses[i].flag = 2;
+                            }else if(focusedAddrses[i].flag == 404){
+                                
+                            }else{
+                                focusedAddrses[i].flag = 3;
+                            }
                         }
                     }
 
-                    
-                    // memset(recieve->pPacket + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct tcphdr) + recieve->payload_len + 1, '\0', 1);
-                    char* packetBinSeq = toBinaryString((void *)recieve->pPacket + sizeof(struct ethhdr),  sizeof(struct iphdr) + sizeof(struct tcphdr) + recieve->payload_len);
-                    // memset(recieve->payload+recieve->payload_len+1, '\0', 1);
-                    char* payloadBinSeq = toBinaryString((void *) recieve->payload, recieve->payload_len);
 
-                    sprintf(jsonSubmit, "{\"tableName\": \"packet_recieve\", \"ifAuto\": true, \"seq\": %u, \"data\": \"%s\", \"packet\": \"%s\", \"time\": \"%s\"}", ntohl(recieve->tcp->seq), payloadBinSeq, packetBinSeq, getTimestamp());
+                    //find index and update database
+                    char* packetBinSeq = toBinaryString((void *)recieve->pPacket + sizeof(struct ethhdr),  sizeof(struct iphdr) + sizeof(struct tcphdr) + recieve->payload_len);
+                    char* payloadBinSeq = toBinaryString((void *) recieve->payload, recieve->payload_len);
+                    char* timestamp = getTimestamp();
+
+                    sprintf(jsonSubmit, "{\"tableName\": \"packet_recieve\", \"ifAuto\": true, \"seq\": %u, \"data\": \"%s\", \"packet\": \"%s\", \"time\": \"%s\"}", ntohl(recieve->tcp->seq), payloadBinSeq, packetBinSeq, timestamp);
                     async_db_put((void *) jsonSubmit, 2);
+
+                    free(packetBinSeq);
+                    free(payloadBinSeq);
+                    free(timestamp);
                 }
             }
         }
 
+        if(savePacket == 0){
+            free(recieve->pPacket);
+        }
 	    free(recieve);
     }
 }

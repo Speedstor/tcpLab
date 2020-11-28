@@ -95,6 +95,7 @@
 
 char jsonSubmit[99999];
 
+//TAG: finished
 int init_socket() {
     //opening socket
     int sock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
@@ -106,6 +107,7 @@ int init_socket() {
     return sock;
 }
 
+//TAG: finished
 unsigned short csum(char* addr, int len){
     unsigned long sum = 0;
 
@@ -124,6 +126,42 @@ unsigned short csum(char* addr, int len){
         sum = (sum & 0xFFFF) + (sum >> 16);
     
     return (~sum);
+}
+
+//TAG: finished
+char* getLocalIp_s(char* device){
+    char deviceName[strlen(device)+1];
+    strncpy(deviceName, device, strlen(device)+1);
+
+    struct ifaddrs *ifaddr, *ifa;
+    int s;
+    static char host[NI_MAXHOST];
+
+    if (getifaddrs(&ifaddr) == -1) 
+    {
+        perror("getifaddrs");
+        exit(EXIT_FAILURE);
+    }
+
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) 
+    {
+        if (ifa->ifa_addr == NULL)
+            continue;  
+
+        s=getnameinfo(ifa->ifa_addr,sizeof(struct sockaddr_in),host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
+
+        if((strcmp(ifa->ifa_name, deviceName) == 0)&&(ifa->ifa_addr->sa_family==AF_INET))
+        {
+            if (s != 0)
+            {
+                // printf("getnameinfo() failed: %s\n", gai_strerror(s));
+                exit(EXIT_FAILURE);
+            }
+            freeifaddrs(ifaddr);
+            return host;
+        }
+    }
+    return NULL;
 }
 
 int send_packet(int sock, int protocol, int src_port, int dst_port, char dest_ip[IPV4STR_MAX_LEN], char message[PAYLOAD_MAX_LEN], char* pOptions)
@@ -273,9 +311,23 @@ int send_packet(int sock, int protocol, int src_port, int dst_port, char dest_ip
         success = sendto(sock, &tBufferPacket, packetsize, 0, dest->ai_addr, dest->ai_addrlen);
 
 
+    
+        // memset(recieve->pPacket + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct tcphdr) + recieve->payload_len + 1, '\0', 1);
+        char* packetBinSeq = toBinaryString((void *) &tBufferPacket, packetsize);
+        // memset(recieve->payload+recieve->payload_len+1, '\0', 1);
+        char* dataBinSeq = toBinaryString((void *) message, strlen(message));
+
+        char* timestamp = getTimestamp();
+
         // char jsonSubmit[99999];
-        sprintf(jsonSubmit, "{\"tableName\": \"packet_sent\", \"seq\": %u, \"data\": \"%s\", \"packet\": \"%s\", \"time\": \"%s\"}", seq, toBinaryString((void *) message, strlen(message)), toBinaryString((void *) &tBufferPacket, packetsize), getTimestamp());
+        sprintf(jsonSubmit, "{\"tableName\": \"packet_sent\", \"seq\": %u, \"data\": \"%s\", \"packet\": \"%s\", \"time\": \"%s\"}", seq, dataBinSeq, packetBinSeq, timestamp);
         async_db_put((void *) jsonSubmit, 1);
+
+        free(packetBinSeq);
+        free(dataBinSeq);
+        free(timestamp);
+
+
 
         if (success < 0)
         {
@@ -315,7 +367,7 @@ int send_packet(int sock, int protocol, int src_port, int dst_port, char dest_ip
         }
         break;
     case 217: //custom modified udp protocol
-        // printf("is not implemented and probably will not be\n");
+        printf("is and probably will not be implemented\n");
         break;
     }
 
@@ -324,10 +376,9 @@ int send_packet(int sock, int protocol, int src_port, int dst_port, char dest_ip
 
 int send_data(int sock, int protocol, int port, char dest_ip[IPV4STR_MAX_LEN], char message[PAYLOAD_MAX_LEN]){
     refresh_progressBar();
-    // printf("\n");
+    
     struct sockaddr_in serv_addr;
     struct rsock_packet recv_packet;
-    // socklen_t len = sizeof(serv_addr);
     int ifavl;
     char* finalMsg;
     char debugText[100];
@@ -337,6 +388,7 @@ int send_data(int sock, int protocol, int port, char dest_ip[IPV4STR_MAX_LEN], c
         sock = init_socket();
         // sudo iptables -A OUTPUT -p tcp --tcp-flags RST RST -j DROP //required !!!!
 
+        //get random open port
         ifavl = -1;
         while(ifavl < 0){
             //check if port open, or get port if port is 0
@@ -356,8 +408,8 @@ int send_data(int sock, int protocol, int port, char dest_ip[IPV4STR_MAX_LEN], c
                 ifavl = 1;
             }
         }
+
         if(1){
-            
             sprintf(debugText, "port number %d || addr: %d\n", ntohs(serv_addr.sin_port), serv_addr.sin_addr.s_addr);
             print_progressBar(debugText, 10);
         }
@@ -385,7 +437,6 @@ int send_data(int sock, int protocol, int port, char dest_ip[IPV4STR_MAX_LEN], c
             if(1){
                 print_progressBar("connection full (%d), please close some connection or wait and try again", 100);
             }
-            // printf("connection full (%d), please close some connection or wait and try again", MAX_CONNECTIONS);
             return -1;
         }
 
@@ -462,7 +513,7 @@ int send_data(int sock, int protocol, int port, char dest_ip[IPV4STR_MAX_LEN], c
 
         focusedAddrses[i].flag = 0;
 
-
+        free(finalMsg);
         break;
     case 17:
         sock = init_socket();
@@ -472,7 +523,6 @@ int send_data(int sock, int protocol, int port, char dest_ip[IPV4STR_MAX_LEN], c
             //check if port open, or get port if port is 0
             bzero((char *) &serv_addr, sizeof(serv_addr));
             serv_addr.sin_family = AF_INET;
-            // serv_addr.sin_addr.s_addr = INADDR_ANY;
 
             serv_addr.sin_port = htons(49152 + (rand() % 16300));
             inet_aton(source_ip, &serv_addr.sin_addr);
@@ -487,8 +537,6 @@ int send_data(int sock, int protocol, int port, char dest_ip[IPV4STR_MAX_LEN], c
             }
         }
 
-        // printf("port number %d\n", ntohs(serv_addr.sin_port));
-
         send_packet(sock, protocol, ntohs(serv_addr.sin_port), port, dest_ip, message, NULL);
         break;
     case 206:
@@ -498,83 +546,6 @@ int send_data(int sock, int protocol, int port, char dest_ip[IPV4STR_MAX_LEN], c
     }
     return -1;
 }
-
-
-struct rsock_packet* raw_recv(char* pIpAddr, int localport){
-
-    //get ipAddr literal
-    char ipAddr[strlen(pIpAddr)+1];
-    strncpy(ipAddr, pIpAddr, strlen(pIpAddr) + 1);
-
-	int sock_r = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
-	if(sock_r < 0) {
-		// printf("error in opening socket\n");
-		return NULL;
-	}else {
-        // // printf("socket opened fine\n");
-    }
-
-	while(1){
-		struct rsock_packet* recieve = recievePacket(sock_r);
-
-        if(strcmp(ipAddr, inet_ntoa((recieve->source).sin_addr)) == 0 && recieve->tcp->dest == localport) {
-            if(validate_tcp_checksum(&recieve->ip, (unsigned short *) recieve->tcp) != 0){
-                // printf("ERROR: !!recvieved tcp packet checksum invalid\n");
-                return NULL;
-            }
-
-            //debug to screen
-            // // printf("%s", DebugEthernetHeader((struct ethhdr*) recieve));
-            // // printf("%s\n\n", DebugIPHeader((struct iphdr*) (&recieve->ip), recieve->source, recieve->dest));
-            // char* pointer = (char *) recieve->tcp; //--------------===
-            // // printf("len: %d\n", recieve->tcp->doff * 4);
-            // for(int i = 0; i < recieve->tcp->doff * 4; i++){
-            // //     printf("%02x ", (unsigned char) pointer[i]);
-            // }
-            // // printf("\n");                          //--------------===
-            // // printf("%s", DebugTcpHeader(recieve->tcp));
-            // //printf("%s", DebugUdpHeader(udp));
-
-            return recieve;
-        }
-    }
-}
-
-char* getLocalIp_s(char* device){
-    char deviceName[strlen(device)+1];
-    strncpy(deviceName, device, strlen(device)+1);
-
-    struct ifaddrs *ifaddr, *ifa;
-    int s;
-    static char host[NI_MAXHOST];
-
-    if (getifaddrs(&ifaddr) == -1) 
-    {
-        perror("getifaddrs");
-        exit(EXIT_FAILURE);
-    }
-
-    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) 
-    {
-        if (ifa->ifa_addr == NULL)
-            continue;  
-
-        s=getnameinfo(ifa->ifa_addr,sizeof(struct sockaddr_in),host, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
-
-        if((strcmp(ifa->ifa_name, deviceName) == 0)&&(ifa->ifa_addr->sa_family==AF_INET))
-        {
-            if (s != 0)
-            {
-                // printf("getnameinfo() failed: %s\n", gai_strerror(s));
-                exit(EXIT_FAILURE);
-            }
-            freeifaddrs(ifaddr);
-            return host;
-        }
-    }
-    return NULL;
-}
-
 
 void *pthread_handle_request(void *vargp) {
     refresh_progressBar();
@@ -586,10 +557,8 @@ void *pthread_handle_request(void *vargp) {
     int clientPort = hints->src_port;
 
 
-    // struct sockaddr_in serv_addr;
     struct rsock_packet recv_packet;
-    // socklen_t len = sizeof(serv_addr);
-    char* finalMsg = malloc(99999);
+    char* finalMsg = malloc(999999);
     char tcpOptions[50];
     char debugText[100];
 
@@ -606,7 +575,6 @@ void *pthread_handle_request(void *vargp) {
             struct packet_hint_pointers buffer = {hints->pSrcIpAddr, hints->src_port, hints->pDestIpAddr, hints->dest_port, &recv_packet, 1, sock, finalMsg};
             focusedAddrses[i] = buffer;
             if(1){
-                
                 sprintf(debugText, "focusedAddrses[%d]: %s | %d | %s | %d\n", i, (char *) focusedAddrses[i].pSrcIpAddr, focusedAddrses[i].src_port, (char*) focusedAddrses[i].pTargetSet, focusedAddrses[i].flag);
                 print_progressBar(debugText, 13);
             }
@@ -617,10 +585,9 @@ void *pthread_handle_request(void *vargp) {
     }
     if(i == -1) {
         if(1){
-            
-            print_progressBar( "connection full (%d), please close some connection or wait and try again", 100);
+            print_progressBar( "connection full (%d), please close some connection or wait and try again", MAX_CONNECTIONS);
         }
-        // printf("connection full (%d), please close some connection or wait and try again", MAX_CONNECTIONS);        
+
         memset(&tcpOptions, '\0', 50);
         sprintf(tcpOptions, "r\t%d\t%d\t", seq, ack_seq);
         send_packet(sock, 6, 8900, clientPort, ipAddr, "", tcpOptions);
@@ -633,17 +600,17 @@ void *pthread_handle_request(void *vargp) {
     send_packet(sock, 6, 8900, clientPort, ipAddr, "", tcpOptions);
 
     if(1){
-        
         print_progressBar("sent syn + ack packet", 20);
     }
 
     //get psh ack and parse data
     while(focusedAddrses[i].flag == 1) msleep(100); //wait for packet
 
-    printf("%s\n", DebugTcpHeader(recv_packet.tcp));
+    char* debugText2 = DebugTcpHeader(recv_packet.tcp); 
+    printf("%s\n", debugText2);
+    free(debugText2);
 
     if(recv_packet.tcp->psh == 1 && recv_packet.tcp->ack == 1){
-        // printf("recieved !! -----------------------------------------------  \n");        
         if(1){
             print_progressBar("recieved request details--", 30);
         }
@@ -652,14 +619,12 @@ void *pthread_handle_request(void *vargp) {
             
             print_progressBar("acknoledge skipped || lost packet || error in ip", 100);
         }
-        // printf("acknoledge skipped || lost packet || error in ip");
         return NULL;
     }else{
         if(1){
             
             print_progressBar("unkown flag condition!!", 100);
         }
-        // printf("unkown flag condition!!");
         return NULL;
     }
         
@@ -678,11 +643,15 @@ void *pthread_handle_request(void *vargp) {
     send_packet(sock, 6, 8900, clientPort, ipAddr, "", tcpOptions);
     
     if(1){
-        
         print_progressBar("Finished, sent data", 100);
     }
     
-    // focusedAddrses[i].flag = 0;
     end_progressBar(0);
+    free(hints->pTargetSet->pPacket);
+    free(hints->pTargetSet);
+    free(finalMsg);
+    
+    // focusedAddrses[i].flag = 0;
+
     return NULL;
 }
