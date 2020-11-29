@@ -19,6 +19,10 @@
 #include <errno.h>
 #include <time.h> 
 
+#include "spz.h"
+#include "tcpHelper.h"
+#include "post.h"
+
 #ifndef NON_STANDARD_CONSTANTS
 #define NON_STANDARD_CONSTANTS
     #define IPV4STR_MAX_LEN 15
@@ -44,10 +48,12 @@
 #endif
 
 
-void tcpNoCheck_packet_send(int sock, int src_port, int dst_port, char dest_ip[IPV4STR_MAX_LEN], char message[PAYLOAD_MAX_LEN], char* pOptions);   //protocol: 207
+void tcpNoCheck_packet_send(int sock, int src_port, int dst_port, char dest_ip[IPV4STR_MAX_LEN], char message[PAYLOAD_MAX_LEN], char* pOptions){
+    printf("sending tcp packets with no checksum is not implemented yet");
+}   //protocol: 207
 
-void tcpcrc_packet_send(int sock, int src_port, int dst_port, struct addrinfo *dest, struct addrinfo *source, char message[PAYLOAD_MAX_LEN], char* pOptions){
-  //construct header
+int tcpcrc_packet_send(int sock, int src_port, int dst_port, struct addrinfo *dest, struct addrinfo *source, char message[PAYLOAD_MAX_LEN], char* pOptions){
+    //construct header
     int protocol = 6;
     char jsonSubmit[99999];
 

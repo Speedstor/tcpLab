@@ -23,7 +23,7 @@ void async_db_put(void* jsonPayloadP, int option){
   threadFlag++;
   if(threadFlag >= 50) threadFlag = 0;
 
-  printf("\n    Record   ---\n\n");
+  // printf("\n    Record   ---\n\n");
 
 	FILE* dbFile;
   if(option == 1){

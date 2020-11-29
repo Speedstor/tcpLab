@@ -70,6 +70,7 @@
     struct addrinfo addr_settings;
     char source_ip[IPV4STR_MAX_LEN];
     struct packet_hint_pointers focusedAddrses[MAX_CONNECTIONS];
+    char message[PAYLOAD_MAX_LEN];
 #endif
 
 #ifndef RSOCK_HELPER_H

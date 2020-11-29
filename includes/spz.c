@@ -57,7 +57,7 @@ char* getTimestamp()
         snprintf(returnString, sizeof timestamp.timestring, "%s.%03ld", timebuffer, timestamp.milliseconds); 
     }
 
-    printf("%s", returnString);
+    // printf("%s", returnString);
 
     return returnString;
 }

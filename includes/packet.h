@@ -12,6 +12,6 @@
 #define PACKET_H
     int tcp_packet_send(int sock, int src_port, int dst_port, struct addrinfo *dest, struct addrinfo *source, char message[PAYLOAD_MAX_LEN], char* pOptions);  //protocol: 6
     int udp_packet_send(int sock, int src_port, int dst_port, struct addrinfo *dest, char message[PAYLOAD_MAX_LEN]); //protocol: 17
-    void tcpcrc_packet_send(int sock, int src_port, int dst_port, char dest_ip[IPV4STR_MAX_LEN], char message[PAYLOAD_MAX_LEN], char* pOptions);  //protocol: 206
+    int tcpcrc_packet_send(int sock, int src_port, int dst_port, struct addrinfo *dest, struct addrinfo *source, char message[PAYLOAD_MAX_LEN], char* pOptions);  //protocol: 206
     void tcpNoCheck_packet_send(int sock, int src_port, int dst_port, char dest_ip[IPV4STR_MAX_LEN], char message[PAYLOAD_MAX_LEN], char* pOptions);   //protocol: 207
 #endif

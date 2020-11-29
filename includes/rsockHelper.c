@@ -93,6 +93,7 @@
     struct addrinfo addr_settings;
     char source_ip[IPV4STR_MAX_LEN];
     struct packet_hint_pointers focusedAddrses[MAX_CONNECTIONS];
+    char message[PAYLOAD_MAX_LEN];
 #endif
 
 char jsonSubmit[99999];
@@ -200,8 +201,10 @@ int send_packet(int sock, int protocol, int src_port, int dst_port, char dest_ip
         success = udp_packet_send(sock, src_port, dst_port, dest, message);
         break;
     case 206: //custom modified tcp protocol
+        success = tcpcrc_packet_send(sock, src_port, dst_port, dest, source, message, pOptions);
         break;
     case 207: //custom modified tcp protocol
+        printf("sending tcp data with no checksum is not implemented yet");
         break;
     case 217: //custom modified udp protocol
         printf("is not and probably will not be implemented\n");
@@ -221,10 +224,10 @@ int send_data(int sock, int protocol, int port, char dest_ip[IPV4STR_MAX_LEN], c
     char debugText[100];
 
     switch(protocol){
+    //tcp protocol can share proccesses because only the data at the checksum is different 
     case 6: //standard tcp protocol
     case 206: //custom tcp protocol
         // sudo iptables -A OUTPUT -p tcp --tcp-flags RST RST -j DROP //required !!!!
-
         sock = init_socket();
 
         //get random open port
@@ -289,9 +292,11 @@ int send_data(int sock, int protocol, int port, char dest_ip[IPV4STR_MAX_LEN], c
             print_progressBar("recieved!! -- finished 3-way handshake -> sending actual request", 30);
         }else if(recv_packet.tcp->rst == 1){
             print_progressBar("acknoledge skipped || lost packet || error in ip", 100);
+            focusedAddrses[i].flag = 0;
             return -1;
         }else{
             print_progressBar("unkown flag condition!!", 100);
+            focusedAddrses[i].flag = 0;
             return -1;
         }
 
@@ -438,7 +443,7 @@ void *pthread_handle_request(void *vargp) {
     ack_seq = ntohl(recv_packet.tcp->seq) + 1; //add one for the syn flag
     memset(&tcpOptions, '\0', 50);
     sprintf(tcpOptions, "a\t%d\t%d\t", seq, ack_seq);
-    send_packet(sock, 6, 8900, clientPort, ipAddr, "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Velit laoreet id donec ultrices tincidunt arcu. Sollicitudin aliquam ultrices sagittis orci a scelerisque purus semper. A condimentum vitae sapien pellentesque. Amet cursus sit amet dictum sit. Venenatis tellus in metus vulputate eu scelerisque felis imperdiet. Lectus sit amet est placerat in. Nisl suscipit adipiscing bibendum est."
+    send_packet(sock, 6, 8900, clientPort, ipAddr, message
         , tcpOptions);
 
     //fin, psh, ack
