@@ -424,10 +424,7 @@ void *pthread_handle_request(void *vargp) {
             print_progressBar("recieved request details--", 30);
         }
     }else if(recv_packet.tcp->rst == 1){
-        if(1){
-            
-            print_progressBar("acknoledge skipped || lost packet || error in ip", 100);
-        }
+        print_progressBar("acknoledge skipped || lost packet || error in ip", 100);
         return NULL;
     }else{
         if(1){
