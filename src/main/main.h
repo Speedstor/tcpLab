@@ -17,13 +17,10 @@
 
     #include <pthread.h>
 
-    //self-defined
-    #include "./definitions.h"
-    #include "./control.h"
-    #include "./includes/spz.h"
-#endif
 
-#ifndef INCLUDES_HEADER
-#define INCLUDES_HEADER
-    #include "./includes/rsockHelper.h"
+    //self-defined
+    #include "../common/definitions.h"
+    #include "../common/control.h"
+    #include "../common/spz.h"
+    #include "../socket/rsockHelper.h"
 #endif

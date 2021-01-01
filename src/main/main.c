@@ -1,7 +1,7 @@
 #include "./main.h"
 
 //global variables
-#include "./global.h"
+#include "../global/global.h"
 
 void usage();
 

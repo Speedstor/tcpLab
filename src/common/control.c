@@ -9,8 +9,8 @@
 #include <sys/types.h>
 
 #include "./definitions.h"
-#include "./global.h"
-#include "./includes/spz.h"
+#include "../global/global.h"
+#include "./spz.h"
 
 void commandUsage();
 void printSettings(Settings_struct printSetting);
