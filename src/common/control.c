@@ -12,8 +12,30 @@
 #include "../global/global.h"
 #include "./spz.h"
 
-void commandUsage();
-void printSettings(Settings_struct printSetting);
+
+void printSettings(Settings_struct printSetting){
+    printf("\n--- Tcp Lab (send custom udp/mostly tcp socket) ------------------------------------------------------------------\n\
+\n\
+   Startup Params:  port: %d | send_mode: %d | receive_mode: %d | dest ip: %s | \n\
+                     net interface: %s | source ip: %s | source port: %d | protocol: %d\n\
+                     message[%d]: %s\n\
+\n\
+-----------------------------------------------------------------------------------------------------------\n\n\n",
+    printSetting.port, printSetting.send_mode, printSetting.receive_mode, printSetting.dest_ip, printSetting.network_interface, printSetting.source_ip, printSetting.src_port, printSetting.protocol, (int)strlen(printSetting.message), printSetting.message);
+}
+
+void commandUsage(){
+    printf("\
+----[help]---------------------------[1/1]---\n\
+   help\t   show help\n\
+   exit\t   stop program\n\
+   _\t   send w/ default set paramter\n\
+   msg [s/f]\t   set message from string or from file, the follow up param is the input\n\
+   dest [arg]]\t   set the destination ip to send to\n\
+   periodic\t   send request for data every 5 seconds\n\
+   emptyDB\t   empty the database that records the packets\n\
+");
+}
 
 void* commandThread(void* vargp) {
     Settings_struct* sets = vargp;
@@ -26,8 +48,8 @@ void* commandThread(void* vargp) {
         if (pParam != NULL) {
             memset(pParam, '\0', 1);
         }
-        if (strcmp(command, "") == 0 || strcmp(command, "_") == 0 || strcmp(command, "send") == 0)
-        {
+
+        if (strcmp(command, "") == 0 || strcmp(command, "_") == 0 || strcmp(command, "send") == 0) {
             if (pParam != NULL)
             {
                 char firstParam[100];
@@ -47,17 +69,19 @@ void* commandThread(void* vargp) {
             {
                 // send_data(sets->socket, sets->protocol, sets->port, sets->dest_ip, sets->message);                   //TODO: add back later
             }
-        }
-        else if (strcmp(command, "msg") == 0)
-        {
-            if (pParam != NULL)
-            {
+        }else if (strcmp(command, "msg") == 0) {
+            if (pParam != NULL){
                 char firstParam[100];
                 char secondParam[100];
                 strncpy(firstParam, pParam + 1, 100);
                 char *pSecParam = strchr(firstParam, ' ');
-                if (pSecParam != NULL)
-                {
+
+                if(in_progress == 1){
+                    printf("a thread is running and using the settings variables, will set afterwards, queing...");
+                    while(in_progress == 1) msleep(200);
+                }
+
+                if (pSecParam != NULL) {
                     memset(pSecParam, '\0', 1);
                     strncpy(secondParam, pSecParam + 1, 100);
                     if (firstParam[0] == 's') { //string option
@@ -73,34 +97,33 @@ void* commandThread(void* vargp) {
                         free(messageFromFile);
                     }
                     printf("message var changed to: %s\n", sets->message);
-                }
-                else
-                {
+                }else {
                     printf("msg must need 2 arguments | Usage: msg [s/f] [string/fileLoc]\n");
                 }
-            }
-            else
-            {
+            }else{
                 printf("msg must need arguments | Usage: msg [s/f] [string/fileLoc]\n");
             }
-        }else if (strcmp(command, "dest") == 0){
-            if (pParam != NULL)
-            {
+        }else if (strcmp(command, "dest") == 0) {
+            if(pParam != NULL){
+                if(in_progress == 1){
+                    printf("a thread is running and using the settings variables, will set afterwards, queing...");
+                    while(in_progress == 1) msleep(200);
+                }
                 memset(&sets->dest_ip, '\0', IPV4STR_MAX_LEN);
                 strncpy(sets->dest_ip, pParam + 1, IPV4STR_MAX_LEN);
                 printf("destination ip set to: %s\n", sets->dest_ip);
             }
-        }else if (strcmp(command, "state") == 0){
+        }else if (strcmp(command, "state") == 0 || strcmp(command, "settings") == 0 || strcmp(command, "setting") == 0) {
             printSettings(*sets);
-        }else if (strcmp(command, "help") == 0){
+        }else if (strcmp(command, "help") == 0) {
             commandUsage();
         }else if (strcmp(command, "exit") == 0 || strcmp(command, "stop") == 0 || strcmp(command, "abort") == 0){
             abort();
         }else if (strcmp(command, "periodic") == 0) {
-            if(cycle_running == 0){
+            if(cycle_running == 0) {
                 cycle_running = 1;
                 printf("starting thread to send request--");
-                // pthread_create(&cycle_thread, NULL, pthread_cycle_send, NULL);                                                                                           !!! Aware!!!! TODO::::
+                // pthread_create(&cycle_thread, NULL, pthread_cycle_send, NULL);                                 !!! Aware!!!! TODO::::
             }else{
                 printf("A thread is already running and sending requests\n");
             }
@@ -109,30 +132,36 @@ void* commandThread(void* vargp) {
             printf("ending thread that send requests--\n");
         }else if (strcmp(command, "emptyDB") == 0){
             //for clean debugging database
+            if(in_progress == 1){
+                printf("a thread is running and using the settings variables, will set afterwards, queing...");
+                while(in_progress == 1) msleep(200);
+            }
+            
             FILE* dbFile;
             dbFile = fopen("tcpDB_sent.txt", "w");
-            if(!dbFile) {
-            	printf("unable to open buffer file:: error\n");
-            }else{
-            //   fprintf(dbFile, "\n");
-            }
+            if(!dbFile) printf("unable to open buffer file:: error\n");
             fclose(dbFile);
+
             dbFile = fopen("tcpDB_receive.txt", "w");
-            if(!dbFile) {
-            	printf("unable to open buffer file:: error\n");
-            }else{
-            //   fprintf(dbFile, "\n");
-            }
+            if(!dbFile) printf("unable to open buffer file:: error\n");
             fclose(dbFile);
 
             printf("emptied database files: tcpDB_receive.txt tcpDB_sent.txt\n");
         }else if (strcmp(command, "protocol") == 0){
             if (pParam != NULL){
+                if(in_progress == 1){
+                    printf("a thread is running and using the settings variables, will set afterwards, queing...");
+                    while(in_progress == 1) msleep(200);
+                }
                 sets->protocol = strtol((char *) pParam + 1, NULL, 10);
                 printf("default protocol set to: %d\n", sets->protocol);
             }
         }else if (strcmp(command, "port") == 0){
             if (pParam != NULL){
+                if(in_progress == 1){
+                    printf("a thread is running and using the settings variables, will set afterwards, queing...");
+                    while(in_progress == 1) msleep(200);
+                }
                 sets->port = strtol((char *) pParam + 1, NULL, 10);
                 if (sets->protocol != 6 && sets->protocol != 17 && sets->protocol != 206 && sets->protocol != 207) {
                     printf("Invalid protocol: %d\n Valid protocols: 6(tcp), 17(udp), 206(custom_tcp), 217(custom_udp)\n", sets->port);
@@ -144,30 +173,4 @@ void* commandThread(void* vargp) {
             printf("Invalid Command.\n");
         }
     }
-}
-
-
-void printSettings(Settings_struct printSetting){
-    printf("\n--- Tcp Lab (send custom udp/mostly tcp socket) ------------------------------------------------------------------\n\
-\n\
-   Startup Params:  port: %d | send_mode: %d | receive_mode: %d | dest ip: %s | \n\
-                     net interface: %s | source ip: %s | source port: %d | protocol: %d\n\
-                     message[%d]: %s\n\
-\n\
------------------------------------------------------------------------------------------------------------\n\n\n",
-    printSetting.port, printSetting.send_mode, printSetting.receive_mode, printSetting.dest_ip, printSetting.network_interface, printSetting.source_ip, printSetting.src_port, printSetting.protocol, (int)strlen(printSetting.message), printSetting.message);
-}
-
-
-void commandUsage(){
-    printf("\
-----[help]---------------------------[1/1]---\n\
-   help\t   show help\n\
-   exit\t   stop program\n\
-   _\t   send w/ default set paramter\n\
-   msg [s/f]\t   set message from string or from file, the follow up param is the input\n\
-   dest [arg]]\t   set the destination ip to send to\n\
-   periodic\t   send request for data every 5 seconds\n\
-   emptyDB\t   empty the database that records the packets\n\
-");
 }
