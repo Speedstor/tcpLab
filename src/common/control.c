@@ -81,6 +81,7 @@ void* commandThread(void* vargp) {
                     while(in_progress == 1) msleep(200);
                 }
 
+                in_progress = 1;
                 if (pSecParam != NULL) {
                     memset(pSecParam, '\0', 1);
                     strncpy(secondParam, pSecParam + 1, 100);
@@ -91,6 +92,7 @@ void* commandThread(void* vargp) {
                         char* messageFromFile = FileToString(secondParam);
                         if(messageFromFile == NULL){
                             printf("file path given for message does not exist, or simply just error:: Given Path: %s", secondParam);
+                            in_progress = -1;
                             continue;
                         } 
                         strncpy(sets->message, messageFromFile, PAYLOAD_MAX_LEN);
@@ -100,6 +102,7 @@ void* commandThread(void* vargp) {
                 }else {
                     printf("msg must need 2 arguments | Usage: msg [s/f] [string/fileLoc]\n");
                 }
+                in_progress = -1;
             }else{
                 printf("msg must need arguments | Usage: msg [s/f] [string/fileLoc]\n");
             }
@@ -109,9 +112,11 @@ void* commandThread(void* vargp) {
                     printf("a thread is running and using the settings variables, will set afterwards, queing...");
                     while(in_progress == 1) msleep(200);
                 }
+                in_progress = 1;
                 memset(&sets->dest_ip, '\0', IPV4STR_MAX_LEN);
                 strncpy(sets->dest_ip, pParam + 1, IPV4STR_MAX_LEN);
                 printf("destination ip set to: %s\n", sets->dest_ip);
+                in_progress = -1;
             }
         }else if (strcmp(command, "state") == 0 || strcmp(command, "settings") == 0 || strcmp(command, "setting") == 0) {
             printSettings(*sets);
@@ -133,10 +138,16 @@ void* commandThread(void* vargp) {
         }else if (strcmp(command, "emptyDB") == 0){
             //for clean debugging database
             if(in_progress == 1){
-                printf("a thread is running and using the settings variables, will set afterwards, queing...");
+                printf("a thread is running and using the settings variables, will emptyDB afterwards, queing...");
                 while(in_progress == 1) msleep(200);
             }
+            if(cycle_running == 1){
+                printf("the send cycle thread is running, will emptyDB afterwards, queing...");
+                while(cycle_running == 1) msleep(200);
+            }
             
+            cycle_running = 1;
+            in_progress = 1;
             FILE* dbFile;
             dbFile = fopen("tcpDB_sent.txt", "w");
             if(!dbFile) printf("unable to open buffer file:: error\n");
@@ -145,6 +156,8 @@ void* commandThread(void* vargp) {
             dbFile = fopen("tcpDB_receive.txt", "w");
             if(!dbFile) printf("unable to open buffer file:: error\n");
             fclose(dbFile);
+            in_progress = -1;
+            cycle_running = -1;
 
             printf("emptied database files: tcpDB_receive.txt tcpDB_sent.txt\n");
         }else if (strcmp(command, "protocol") == 0){
@@ -153,8 +166,10 @@ void* commandThread(void* vargp) {
                     printf("a thread is running and using the settings variables, will set afterwards, queing...");
                     while(in_progress == 1) msleep(200);
                 }
+                in_progress = 1;
                 sets->protocol = strtol((char *) pParam + 1, NULL, 10);
                 printf("default protocol set to: %d\n", sets->protocol);
+                in_progress = -1;
             }
         }else if (strcmp(command, "port") == 0){
             if (pParam != NULL){
@@ -162,12 +177,14 @@ void* commandThread(void* vargp) {
                     printf("a thread is running and using the settings variables, will set afterwards, queing...");
                     while(in_progress == 1) msleep(200);
                 }
+                in_progress = 1;
                 sets->port = strtol((char *) pParam + 1, NULL, 10);
                 if (sets->protocol != 6 && sets->protocol != 17 && sets->protocol != 206 && sets->protocol != 207) {
                     printf("Invalid protocol: %d\n Valid protocols: 6(tcp), 17(udp), 206(custom_tcp), 217(custom_udp)\n", sets->port);
                 }else{
                     printf("default protocol set to: %d\n", sets->port);
                 }
+                in_progress = -1;
             }
         }else{
             printf("Invalid Command.\n");

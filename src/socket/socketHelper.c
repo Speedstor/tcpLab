@@ -18,18 +18,8 @@
 #include <errno.h>
 #include <time.h>
 
+#include "../common/definitions.h"
 
-#ifndef NON_STANDARD_CONSTANTS
-#define NON_STANDARD_CONSTANTS
-    #define IPV4STR_MAX_LEN 15
-    #define PSEUDO_TCP_HDR_LEN 12
-    #define NETWORK_INTERFACE_MAX_LEN 16
-    #define PAYLOAD_MAX_LEN 1400
-    #define MAX_CONNECTIONS 40
-#endif
-
-
-//TAG: finished
 char* getLocalIp_s(char* device){
     struct ifaddrs *ifaddr, *ifa;
     int s;
@@ -37,7 +27,7 @@ char* getLocalIp_s(char* device){
 
     if (getifaddrs(&ifaddr) == -1) {
         perror("getifaddrs");
-        exit(-1);
+        return NULL;
     }
 
     for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {

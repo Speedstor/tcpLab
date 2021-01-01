@@ -104,13 +104,21 @@ int main(int argc, char **argv) {
 
     //SECTION: start of program
     running = 1;
-    //TODO: setup socket
+    //setup send socket
+    send_socket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    if (send_socket < 0) {
+        printf("socket opening error\n");
+        return -1;
+    }else printf("send socket opened fine (1): program initialized--");
 
-
-    //TODO: setup command thread
+    //setup command thread
     pthread_t commandThread_id;
     pthread_create(&commandThread_id, NULL, commandThread, &settings);
 
+    //setup receive thread
+    
+
+    //stall
     while(running){
         
     }

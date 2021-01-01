@@ -22,5 +22,5 @@
     #include "../common/definitions.h"
     #include "../common/control.h"
     #include "../common/spz.h"
-    #include "../socket/rsockHelper.h"
+    #include "../socket/socketHelper.h"
 #endif
