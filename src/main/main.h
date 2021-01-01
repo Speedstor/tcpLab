@@ -21,6 +21,6 @@
     //self-defined
     #include "../common/definitions.h"
     #include "../common/control.h"
+    #include "../socket/socketCore.h"
     #include "../common/spz.h"
-    #include "../socket/socketHelper.h"
 #endif

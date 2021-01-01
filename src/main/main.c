@@ -17,8 +17,8 @@ int main(int argc, char **argv) {
     in_progress = -1;
 
     //a store of addresses to keep track of what is of interest and in store
-    // struct packet_hint_pointers focusedAddrses[MAX_CONNECTIONS];                       TODO: add back later5
-    // memset(&focusedAddrses, 0, sizeof(focusedAddrses)); //not tested !!! maybe bug
+    struct packet_hint_pointers focusedAddrses[MAX_CONNECTIONS];                       
+    memset(&focusedAddrses, 0, sizeof(focusedAddrses));
 
     //setup default variables
     struct Settings_struct settings = {
@@ -104,23 +104,31 @@ int main(int argc, char **argv) {
 
     //SECTION: start of program
     running = 1;
-    //setup send socket
-    send_socket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
-    if (send_socket < 0) {
-        printf("socket opening error\n");
+    //setup socket
+    settings.sendSocket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+	settings.receiveSocket = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+    if (settings.sendSocket < 0 || settings.receiveSocket < 0) {
+        printf("socket opening error [might need root privileges]\n");
         return -1;
-    }else printf("send socket opened fine (1): program initialized--");
+    }
+
+    //setup receive thread
+    ReceiveThread_args rArgs = {
+        &focusedAddrses,
+        &settings
+    };
+    pthread_t receiveThread_id;
+    pthread_create(&receiveThread_id, NULL, receiveThread, &rArgs);
 
     //setup command thread
     pthread_t commandThread_id;
     pthread_create(&commandThread_id, NULL, commandThread, &settings);
 
-    //setup receive thread
-    
 
     //stall
+    printf("program initialized, stalling... (1): --\n");
     while(running){
-        
+        sleep(1200);
     }
 }
 
