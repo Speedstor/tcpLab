@@ -19,8 +19,10 @@
 #include <time.h>
 
 #include "../common/definitions.h"
+#include "./tcp/tcp.h"
 
 int receivePacket(Rsock_packet* rPacket, int sock_r);
+int clientRequest(int socket, int port, int protocol, char source_ip[IPV4STR_MAX_LEN], char dest_ip[IPV4STR_MAX_LEN], char requestMsg[PAYLOAD_MAX_LEN], Packet_hint_pointers (* focusedAddrses)[MAX_CONNECTIONS]);
 
 char* getLocalIp_s(char* device){
     struct ifaddrs *ifaddr, *ifa;
@@ -49,35 +51,64 @@ char* getLocalIp_s(char* device){
     return NULL;
 }
 
+int clientRequest(int socket, int port, int protocol, char source_ip[IPV4STR_MAX_LEN], char dest_ip[IPV4STR_MAX_LEN], char requestMsg[PAYLOAD_MAX_LEN], Packet_hint_pointers (* focusedAddrses)[MAX_CONNECTIONS]){
+    struct sockaddr_in serv_addr;
+    char finalMsg[MESSAGE_MAX_LEN];
+
+    //check if port open, or get available free port if port is 0
+    int ifavl = -1;
+    while(ifavl < 0){
+        bzero((char *) &serv_addr, sizeof(serv_addr));
+        serv_addr.sin_family = AF_INET;
+        serv_addr.sin_port = htons(49152 + (rand() % 16300));
+        inet_aton(source_ip, &serv_addr.sin_addr);
+
+        if(bind(socket, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) >= 0)  ifavl = 1;
+    }
+// int tcp_request(int socket, int destPort, struct sockaddr_in serv_addr, char dest_ip[IPV4STR_MAX_LEN], char requestMsg[PAYLOAD_MAX_LEN], char* finalMsg, Packet_hint_pointers (* focusedAddrses)[MAX_CONNECTIONS]){
+
+    switch(protocol){
+        case 6:                                        //standard tcp
+            tcp_request(socket, port, serv_addr, dest_ip, requestMsg, (char*) &finalMsg, focusedAddrses);
+            break;
+        case 206:                                      //custom tcp
+            break;
+        case 7:                                        //standard udp
+            break;
+        case 207:                                      //custom udp
+            return -1;
+            break;
+    }
+    return 1;
+}
+
 void* receiveThread(void* vargp){
-    struct packet_hint_pointers (*focusedAddrses)[MAX_CONNECTIONS] = ((ReceiveThread_args *)vargp)->focusedAddrses;
+    Packet_hint_pointers (*focusedAddrses)[MAX_CONNECTIONS] = ((ReceiveThread_args *)vargp)->focusedAddrses;
     Settings_struct* settings = ((ReceiveThread_args *)vargp)->settings;
 
     int socket = settings->receiveSocket;
 
 	while(1){
-        Rsock_packet receive; 
+        Rsock_packet receive;
     	memset(&receive, 0, sizeof(Rsock_packet));
 
 		int rSuccess = receivePacket(&receive, socket);
-        if(rSuccess < 0) continue;
+        if(rSuccess < 0) continue; //bad packet and error in receiving
 
-        if(receive.protocol != 6) continue; //only tcp packets are succored for now
+        if(receive.protocol != 6 && receive.protocol != 206) continue; //only tcp packets are supported for now
         for(int i=0; i < MAX_CONNECTIONS; i++){
             if((*focusedAddrses)[i].flag != 0 && (*focusedAddrses)[i].flag != 404){
-                if(strcmp((*focusedAddrses)[i].pSrcIpAddr, inet_ntoa(receive.source.sin_addr)) == 0 
-                  && htons(receive.tcp.dest) == (*focusedAddrses)[i].dest_port 
-                  && htons(receive.tcp.source) == (*focusedAddrses)[i].src_port
-                  && strcmp((*focusedAddrses)[i].pDestIpAddr, inet_ntoa((receive.dest).sin_addr)) == 0) {
-                      
+                if(strcmp((*focusedAddrses)[i].RemoteIpAddr, inet_ntoa(receive.source.sin_addr)) == 0
+                  && htons(receive.tcp.dest) == (*focusedAddrses)[i].local_port
+                  && htons(receive.tcp.source) == (*focusedAddrses)[i].remote_port
+                  && strcmp((*focusedAddrses)[i].LocalIpAddr, inet_ntoa((receive.dest).sin_addr)) == 0) {
+
 
                 }
             }
         }
         free(receive.pPacket);
     }
-
-
     return NULL;
 }
 
@@ -91,44 +122,35 @@ int receivePacket(Rsock_packet* rPacket, int sock_r){
 	int saddr_len = sizeof(saddr);
 	int buflen = recvfrom(sock_r, buffer, 65536, 0, &saddr, (socklen_t *)&saddr_len);
 	if(buflen < 0) {
-		// printf("error in reading recvfrom function in receivePacket() \n");
+        free(buffer);
 		return -1;
 	}
 
 	//extract ethernet header                                   ETHERNET
     memcpy(&rPacket->eth, buffer, sizeof(struct ethhdr));
-	// struct ethhdr *eth = (struct ethhdr *)(buffer);
-
 
 	//extract ip header & get ips of source and destination     IP
     memcpy(&rPacket->ip, (buffer + sizeof(struct ethhdr)), sizeof(struct iphdr));
 	struct sockaddr_in source, dest;
-	// memset(&source, 0, sizeof(source));                                  //WARNING:: not tested without yet
-	// memset(&dest, 0, sizeof(dest));                                      //WARNING:: not tested without yet
 	source.sin_addr.s_addr = rPacket->ip.saddr;
 	dest.sin_addr.s_addr = rPacket->ip.daddr;
-	
+
 	rPacket->source = source;
 	rPacket->dest = dest;
 	rPacket->protocol = rPacket->ip.protocol;
 
-
 	//extract transport layer header                            TRANSPORT
 	int iphdrlen = rPacket->ip.ihl * 4;// getting size of IP header from header (more accurate/foolproof)
-
 	switch(rPacket->protocol){
 		case 6:
 			//tcp
             memcpy(&rPacket->tcp, (buffer + iphdrlen + sizeof(struct ethhdr)), sizeof(struct tcphdr));
 
 			rPacket->payload_len = ntohs(rPacket->ip.tot_len) - (rPacket->ip.ihl<<2) - (rPacket->tcp.doff * 4);
-            if(rPacket->payload_len <= PAYLOAD_MAX_LEN)  {
+            if(rPacket->payload_len <= PAYLOAD_MAX_LEN)
                 strncpy((char *)&rPacket->payload, (char *)(buffer + iphdrlen  + sizeof(struct ethhdr) + rPacket->tcp.doff * 4), rPacket->payload_len);
-            }
-            else {
-                // returnVar.payload = "error(-1)";
-            }
-			// remaining_data_len = buflen - (iphdrlen + sizeof(struct ethhdr) + tcp->doff * 4);
+            else
+                strcpy((char *)&rPacket->payload, "error(-1)");
 
 			break;
 		case 17:
@@ -136,18 +158,15 @@ int receivePacket(Rsock_packet* rPacket, int sock_r){
             memcpy(&rPacket->udp, (buffer + iphdrlen + sizeof(struct ethhdr)), sizeof(struct udphdr));
 
 			rPacket->payload_len = buflen - (iphdrlen + sizeof(struct ethhdr) + sizeof(struct udphdr));
-            if(rPacket->payload_len <= PAYLOAD_MAX_LEN)  {
+            if(rPacket->payload_len <= PAYLOAD_MAX_LEN)
                 strncpy((char *)&rPacket->payload, (char *)(buffer + iphdrlen  + sizeof(struct ethhdr) + sizeof(struct udphdr)), rPacket->payload_len);
-            }else
-            {
-                // returnVar.payload = "error(-1)";
-            }
-            
+            else
+                strcpy((char *)&rPacket->payload, "error(-1)");
+
 			break;
 		default:
 			//other
 			rPacket -> other = 1;
-
 			rPacket->payload_len = buflen - (iphdrlen + sizeof(struct ethhdr));
             strncpy((char *)&rPacket->payload, (char *)(buffer + iphdrlen  + sizeof(struct ethhdr)), rPacket->payload_len);
 			break;

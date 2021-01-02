@@ -16,19 +16,6 @@
     #define MAX_CONNECTIONS 40
 #endif
 
-#ifndef PACKET_HINTS_STRUCT
-#define PACKET_HINTS_STRUCT
-    struct packet_hint_pointers {
-        char pSrcIpAddr[IPV4STR_MAX_LEN];
-        int src_port;
-        char pDestIpAddr[IPV4STR_MAX_LEN];
-        int dest_port;
-        // Rsock_packet* pTargetSet; 
-        int flag;       //DEF: 0-empty pointer || 1-wait for packet || 2-packet ready || 3-packet overwritten (warning!!)
-        int sock;
-        char msg[MESSAGE_MAX_LEN];
-    };
-#endif
 
 #ifndef settings_struct
 #define settings_struct
@@ -69,10 +56,24 @@
     }Rsock_packet;
 #endif
 
+#ifndef PACKET_HINTS_STRUCT
+#define PACKET_HINTS_STRUCT
+    typedef struct Packet_hint_pointers {
+        char RemoteIpAddr[IPV4STR_MAX_LEN];
+        int remote_port;
+        char LocalIpAddr[IPV4STR_MAX_LEN];
+        int local_port;
+        Rsock_packet* pTargetSet; 
+        int flag;       //DEF: 0-empty pointer || 1-wait for packet || 2-packet ready || 3-packet overwritten (warning!!)
+        int sock;
+        char* msg;
+    }Packet_hint_pointers;
+#endif
+
 #ifndef RECEIVE_THREAD_ARGS
 #define RECEIVE_THREAD_ARGS
     typedef struct ReceiveThread_args{
-        struct packet_hint_pointers (*focusedAddrses) [MAX_CONNECTIONS];
+        Packet_hint_pointers (*focusedAddrses) [MAX_CONNECTIONS];
         Settings_struct* settings;
     }ReceiveThread_args;
 #endif

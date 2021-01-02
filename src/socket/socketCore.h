@@ -4,6 +4,7 @@
     char* getLocalIp_s(char* device);
     int receivePacket(Rsock_packet* rPacket, int sock_r);
     void* receiveThread(void* vargp);
+    int clientRequest(int socket, int protocol, char dest_ip[IPV4STR_MAX_LEN], char requestMsg[PAYLOAD_MAX_LEN], Packet_hint_pointers (* focusedAddrses)[MAX_CONNECTIONS]);
 
 
     // unsigned short csum(char* addr, int len);

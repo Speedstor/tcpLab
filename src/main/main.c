@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
     in_progress = -1;
 
     //a store of addresses to keep track of what is of interest and in store
-    struct packet_hint_pointers focusedAddrses[MAX_CONNECTIONS];                       
+    Packet_hint_pointers focusedAddrses[MAX_CONNECTIONS];                       
     memset(&focusedAddrses, 0, sizeof(focusedAddrses));
 
     //setup default variables
