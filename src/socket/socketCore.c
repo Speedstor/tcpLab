@@ -69,7 +69,7 @@ int clientRequest(int socket, int port, int protocol, char source_ip[IPV4STR_MAX
 
     switch(protocol){
         case 6:                                        //standard tcp
-            tcp_request(socket, port, serv_addr, dest_ip, requestMsg, (char*) &finalMsg, focusedAddrses);
+            tcp_request_singleThread(socket, port, serv_addr, dest_ip, requestMsg, (char*) &finalMsg, focusedAddrses);
             break;
         case 206:                                      //custom tcp
             break;

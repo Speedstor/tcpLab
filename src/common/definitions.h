@@ -17,6 +17,22 @@
 #endif
 
 
+#ifndef JUMBO_PACKET_HELPER
+#define JUMBO_PACKET_HELPER
+    struct udp_packet {
+        struct ip ip;
+        struct udphdr udp;
+        char payload[PAYLOAD_MAX_LEN];
+    } __attribute__((packed));
+
+    struct tcp_packet {
+        struct ip ip;
+        struct tcphdr tcp;
+        char payload[PAYLOAD_MAX_LEN];
+    } __attribute__((packed));
+#endif
+
+
 #ifndef settings_struct
 #define settings_struct
     typedef struct Settings_struct {
@@ -67,6 +83,7 @@
         int flag;       //DEF: 0-empty pointer || 1-wait for packet || 2-packet ready || 3-packet overwritten (warning!!)
         int sock;
         char* msg;
+        int isWriting;
     }Packet_hint_pointers;
 #endif
 

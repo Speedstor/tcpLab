@@ -7,7 +7,6 @@ void usage();
 
 int main(int argc, char **argv) {
     //setting variables -------------
-    struct addrinfo addr_settings;
     memset(&addr_settings, 0, sizeof(addr_settings));
     addr_settings.ai_flags = AF_INET;
     addr_settings.ai_socktype = SOCK_RAW;
@@ -15,6 +14,8 @@ int main(int argc, char **argv) {
 
     cycle_running = 0;
     in_progress = -1;
+    recordDB = -1;
+    ifMultithread = -1;
 
     //a store of addresses to keep track of what is of interest and in store
     Packet_hint_pointers focusedAddrses[MAX_CONNECTIONS];                       
@@ -40,11 +41,12 @@ int main(int argc, char **argv) {
     //receive args -------------
     char c;
     while (1) {
-        c = getopt_long(argc, argv, "SRP:s:d:p:i:hm:", NULL, NULL);
+        c = getopt_long(argc, argv, "hrSRPM:s:d:p:i:m:", NULL, NULL);
         if (c == -1) break;
 
         switch (c) {
         case 'd': //destination ip
+            //TODO: check and document that it only supports ipv4
             strncpy(settings.dest_ip, optarg, IPV4STR_MAX_LEN);
             break;
         case 'P': //port
@@ -72,12 +74,19 @@ int main(int argc, char **argv) {
             settings.receive_mode = 1;
             settings.send_mode = 0;
             break;
+        case 'r': //record packets
+            recordDB = 1;
+            break;
         case 'p': //default protocol that is going to be used
             settings.protocol = strtol(optarg, NULL, 10);
             if (settings.protocol != 6 && settings.protocol != 17 && settings.protocol != 206 && settings.protocol != 207) {
                 printf("Invalid protocol: %d\n Valid protocols: 6(tcp), 17(udp), 206(custom_tcp), 217(custom_udp)\n", settings.port);
                 return -1;
             }
+            break;
+        case 'M':
+            printf("multithread not supported in sending yet, but is automatic in server receive mode\n");
+            ifMultithread = -1;
             break;
         case '?': //help
         case 'h':
@@ -130,11 +139,15 @@ int main(int argc, char **argv) {
     while(running){
         sleep(1200);
     }
+
+    //for debugging re-do make
+    printf("modified");
 }
 
 void usage(){
     printf("---- Tcp/ip Tester --------------------------[help]--\n\
   -r\t     record packets to database\n\
+  -M\t     multithread in sending and receiving (have performance gain) [not implemented in send mode yet]\n\
   -u\t     url to send recorded packets to\n\
   -S/R\t     select send or receive mode (default: -s)\n\
   -P\t     destination port number (default: 8900)\n\

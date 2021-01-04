@@ -1,3 +1,4 @@
+#include <netdb.h>
 #include <pthread.h>
 
 #ifndef GLOBAL_VARIABLES
@@ -6,4 +7,9 @@
     int cycle_running;
     int in_progress;
     int running;
+    int ifMultithread;
+
+    struct addrinfo addr_settings; //global so that it need to only set once
+
+    int recordDB;
 #endif

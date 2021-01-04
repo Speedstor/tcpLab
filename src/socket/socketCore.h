@@ -1,3 +1,4 @@
+#include "../common/definitions.h"
 
 #ifndef RSOCK_HELPER_H
 #define RSOCK_HELPER_H
