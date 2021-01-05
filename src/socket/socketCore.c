@@ -22,7 +22,7 @@
 #include "./tcp/tcp.h"
 
 int receivePacket(Rsock_packet* rPacket, int sock_r);
-int clientRequest(int socket, int port, int protocol, char source_ip[IPV4STR_MAX_LEN], char dest_ip[IPV4STR_MAX_LEN], char requestMsg[PAYLOAD_MAX_LEN], Packet_hint_pointers (* focusedAddrses)[MAX_CONNECTIONS]);
+int clientRequest(int socket, int protocol, char source_ip[IPV4STR_MAX_LEN], char dest_ip[IPV4STR_MAX_LEN], int dest_port, char requestMsg[PAYLOAD_MAX_LEN]);
 
 char* getLocalIp_s(char* device){
     struct ifaddrs *ifaddr, *ifa;
@@ -51,7 +51,7 @@ char* getLocalIp_s(char* device){
     return NULL;
 }
 
-int clientRequest(int socket, int port, int protocol, char source_ip[IPV4STR_MAX_LEN], char dest_ip[IPV4STR_MAX_LEN], char requestMsg[PAYLOAD_MAX_LEN], Packet_hint_pointers (* focusedAddrses)[MAX_CONNECTIONS]){
+int clientRequest(int socket, int protocol, char source_ip[IPV4STR_MAX_LEN], char dest_ip[IPV4STR_MAX_LEN], int dest_port, char requestMsg[PAYLOAD_MAX_LEN]){
     struct sockaddr_in serv_addr;
     char finalMsg[MESSAGE_MAX_LEN];
 
@@ -69,7 +69,8 @@ int clientRequest(int socket, int port, int protocol, char source_ip[IPV4STR_MAX
 
     switch(protocol){
         case 6:                                        //standard tcp
-            tcp_request_singleThread(socket, port, serv_addr, dest_ip, requestMsg, (char*) &finalMsg, focusedAddrses);
+// int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int dest_port, char src_ip[IPV4STR_MAX_LEN], int src_port, char requestMsg[PAYLOAD_MAX_LEN], char* finalMsg){
+            tcp_request_singleThread(socket, dest_ip, dest_port, source_ip, ntohs(serv_addr.sin_port), requestMsg, (char *) &finalMsg);
             break;
         case 206:                                      //custom tcp
             break;
@@ -79,37 +80,9 @@ int clientRequest(int socket, int port, int protocol, char source_ip[IPV4STR_MAX
             return -1;
             break;
     }
+
+    if(strlen(finalMsg) > 0)    printf("Received:  %s\n", finalMsg);
     return 1;
-}
-
-void* receiveThread(void* vargp){
-    Packet_hint_pointers (*focusedAddrses)[MAX_CONNECTIONS] = ((ReceiveThread_args *)vargp)->focusedAddrses;
-    Settings_struct* settings = ((ReceiveThread_args *)vargp)->settings;
-
-    int socket = settings->receiveSocket;
-
-	while(1){
-        Rsock_packet receive;
-    	memset(&receive, 0, sizeof(Rsock_packet));
-
-		int rSuccess = receivePacket(&receive, socket);
-        if(rSuccess < 0) continue; //bad packet and error in receiving
-
-        if(receive.protocol != 6 && receive.protocol != 206) continue; //only tcp packets are supported for now
-        for(int i=0; i < MAX_CONNECTIONS; i++){
-            if((*focusedAddrses)[i].flag != 0 && (*focusedAddrses)[i].flag != 404){
-                if(strcmp((*focusedAddrses)[i].RemoteIpAddr, inet_ntoa(receive.source.sin_addr)) == 0
-                  && htons(receive.tcp.dest) == (*focusedAddrses)[i].local_port
-                  && htons(receive.tcp.source) == (*focusedAddrses)[i].remote_port
-                  && strcmp((*focusedAddrses)[i].LocalIpAddr, inet_ntoa((receive.dest).sin_addr)) == 0) {
-
-
-                }
-            }
-        }
-        free(receive.pPacket);
-    }
-    return NULL;
 }
 
 int receivePacket(Rsock_packet* rPacket, int sock_r){

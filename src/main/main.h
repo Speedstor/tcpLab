@@ -23,4 +23,5 @@
     #include "../common/control.h"
     #include "../socket/socketCore.h"
     #include "../common/spz.h"
+    #include "../socket/receiveThread.h"
 #endif

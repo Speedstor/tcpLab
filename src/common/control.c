@@ -11,6 +11,7 @@
 #include "./definitions.h"
 #include "../global/global.h"
 #include "./spz.h"
+#include "../socket/socketCore.h"
 
 
 void printSettings(Settings_struct printSetting){
@@ -34,6 +35,7 @@ void commandUsage(){
    dest [arg]]\t   set the destination ip to send to\n\
    periodic\t   send request for data every 5 seconds\n\
    emptyDB\t   empty the database that records the packets\n\
+   send <prot>\t   send packet with the protocol specified\n\
 ");
 }
 
@@ -62,11 +64,13 @@ void* commandThread(void* vargp) {
                 }
                 else
                 {
+                    clientRequest(sets->sendSocket, protocol, sets->source_ip, sets->dest_ip, sets->port, sets->message);
                     // send_data(sets->socket, protocol, sets->port, sets->dest_ip, sets->message);                 //TODO: add back later
                 }
             }
             else
             {
+                clientRequest(sets->sendSocket, sets->protocol, sets->source_ip, sets->dest_ip, sets->port, sets->message);
                 // send_data(sets->socket, sets->protocol, sets->port, sets->dest_ip, sets->message);                   //TODO: add back later
             }
         }else if (strcmp(command, "msg") == 0) {
@@ -189,5 +193,6 @@ void* commandThread(void* vargp) {
         }else{
             printf("Invalid Command.\n");
         }
+        msleep(150);
     }
 }

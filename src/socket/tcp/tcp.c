@@ -89,7 +89,6 @@ int tcp_sendPacket(int sock, int src_port, int dst_port, struct addrinfo *dest, 
     seq = 1;
     seq_ack = 0;
     if(pParam != NULL){
-        printf("%s\n", pParam);
         char *pSecParam = strchr(pParam + 1, '\t');
         if(pSecParam != NULL){
             memset(pSecParam, '\0', 1);
@@ -139,13 +138,16 @@ int tcp_sendPacket(int sock, int src_port, int dst_port, struct addrinfo *dest, 
     return packetsize;
 }
 
-int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int dest_port, char src_ip[IPV4STR_MAX_LEN], int src_port, char requestMsg[PAYLOAD_MAX_LEN], char* finalMsg){
-    progressBar_print("started tcp request", 1);
-    char debugText[150];
+int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int dest_port, char src_ip[IPV4STR_MAX_LEN], int src_port, char* requestMsg, char* finalMsg){
+    char progressBar[150];
+    getProgressBarString(1, (char *) &progressBar);
+    printf("\33[2K %s started tcp request\r", progressBar);
+    fflush(stdout);
     Rsock_packet recv_packet;
 
-    sprintf(debugText, "src port number %d || addr: %s\n", src_port, src_ip);
-    progressBar_print(debugText, 10);
+    getProgressBarString(10, (char *) &progressBar);
+    printf("\33[2K %s src port number %d || addr: %s\r", progressBar, src_port, src_ip);
+    fflush(stdout);
 
     struct addrinfo *dest, *source;
     int error = getaddrinfo(dest_ip, NULL, &addr_settings, &dest);
@@ -163,14 +165,18 @@ int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int
     //setup receive send_socket first so it won't take time in between the sending and receiving and miss the packet
     int recv_socket = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
 
-    progressBar_print("initiating tcp handshake................", 20);
+    getProgressBarString(20, (char *) &progressBar);
+    printf("\33[2K %s initiating tcp handshake...\r", progressBar);
+    fflush(stdout);
     /**
      * First Packet  ------
      */
     sprintf(tcpOptions, "s\t%d\t%d\t", seq, ack_seq);
     tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
 
-    progressBar_print("waiting response................", 25);
+    getProgressBarString(25, (char *) &progressBar);
+    printf("\33[2K %s waiting response...\r", progressBar);
+    fflush(stdout);
     
 
     // /**
@@ -190,14 +196,20 @@ int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int
     tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
 
     if(recv_packet.tcp.rst == 1){
-        progressBar_print("tcp received reset flag, stopped process", 100);
+        getProgressBarString(100, (char *) &progressBar);
+        printf("\33[2K %s tcp received reset flag, stopped process\r", progressBar);
+        fflush(stdout);
         return -1;
     }else if (recv_packet.tcp.syn != 1 && recv_packet.tcp.ack != 1){
-        progressBar_print("unkown flag condition!!", 100);
+        getProgressBarString(100, (char *) &progressBar);
+        printf("\33[2K %s unkown flag condition!!\r", progressBar);
+        fflush(stdout);
         return -1;
     }
 
-    progressBar_print("received!! -- finished 3-way handshake -> sending actual request", 30);
+    getProgressBarString(30, (char *) &progressBar);
+    printf("\33[2K %s received, fin 3-way handshake\r", progressBar);
+    fflush(stdout);
     //END: finish handshake --------------------------------------------------------------------------------------------
 
     /**
@@ -208,12 +220,18 @@ int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int
 
     sprintf(tcpOptions, "pa\t%d\t%d\t", seq, ack_seq);
     tcp_sendPacket(send_socket, src_port, dest_port, dest, source, requestMsg, tcpOptions);
+    getProgressBarString(35, (char *) &progressBar);
+    printf("\33[2K %s sent request string\r", progressBar);
+    fflush(stdout);
 
     /**
      * Receive ack Packet  ------
      */
     listenForPacket(&recv_packet, recv_socket, 6, dest_ip, dest_port, src_ip, src_port, seq+=strlen(requestMsg));
     if(recv_packet.tcp.ack == 1) //normal behavior; TODO: else and handle exception
+    getProgressBarString(39, (char *) &progressBar);
+    printf("\33[2K %s received ack packet\r", progressBar);
+    fflush(stdout);
 
     /**
      * Receive data Packet  ------
@@ -224,6 +242,12 @@ int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int
     if(recv_packet.tcp.syn == 1) ack_seq++;
     sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
     tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
+
+    strcpy(finalMsg, recv_packet.payload);
+
+    getProgressBarString(61, (char *) &progressBar);
+    printf("\33[2K %s received message from server\r", progressBar);
+    fflush(stdout);
 
     /**
      * Receive remaining Packets  ------
@@ -239,8 +263,11 @@ int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int
         //TODO: keep adding to the finalMsg or react to the flags
     }
 
+    getProgressBarString(100, (char *) &progressBar);
+    printf("\33[2K %s tcp/ip gateway finished and closed\n", progressBar);
+    fflush(stdout);
+
     // end_progressBar(0);
-    printf("%s\n", finalMsg);
     return 1;
 }
 

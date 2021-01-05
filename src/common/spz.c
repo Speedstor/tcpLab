@@ -116,11 +116,7 @@ void refresh_progressBar(){
 }
 
 
-void progressBar_print(char* text, int percentage){
-	char copyText[42];
-	// memset(&copyText, '\0', 42);
-	strncpy(copyText, text, 41);
-
+void getProgressBarString(int percentage, char* progressText){
     char progressBar[36];
     memset(&progressBar+35, '\0', 1);
     int numOfDots = (int) 35 * percentage / 100;
@@ -132,26 +128,7 @@ void progressBar_print(char* text, int percentage){
         }
     }
 
-    int i = 1;
-    // for(i = 0; i < STATUS_BUFFER_MAX; i++){
-    //     if(statusBuffer[i] == NULL){
-    //         statusBuffer[i] = text;
-    //         break;
-    //     } 
-    // }
-
-    char progressText[400];
-    sprintf(progressText, ">%%[%s]|%d %d%%|  %s", progressBar, i, percentage, copyText);
-
-	int textLength = strlen(progressText);
-	int addTrailWhitespace = 150 - textLength;
-	for(int i = 0; i < addTrailWhitespace; i++){
-		sprintf((char*) (&progressText + textLength + i), "_"); //for debug
-		// sprintf(&progressText + textLength + i, " ");
-	}
-
-	for(int i = 0; i < 150; i++) printf("\b");
-    printf("%s", progressText);
+    sprintf(progressText, "> [%s]|%d%%|", progressBar, percentage);
 }	
 
 

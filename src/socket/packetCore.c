@@ -36,7 +36,7 @@ int listenForPacket(Rsock_packet* recv_packet, int socket, int protocol, char de
 
                 //might be better to be in the upperFunction
                 if(validate_tcp_checksum(&recv_packet->ip, (unsigned short *) &recv_packet->tcp) != 0){
-                    printf("ERROR: !!received tcp packet checksum invalid\n");
+                    // printf("ERROR: !!received tcp packet checksum invalid\n");
                     // return -1;
                 }
 
