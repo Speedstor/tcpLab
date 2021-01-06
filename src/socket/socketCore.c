@@ -20,6 +20,7 @@
 
 #include "../common/definitions.h"
 #include "./tcp/tcp.h"
+#include "../global/global.h"
 
 int receivePacket(Rsock_packet* rPacket, int sock_r);
 int clientRequest(int socket, int protocol, char source_ip[IPV4STR_MAX_LEN], char dest_ip[IPV4STR_MAX_LEN], int dest_port, char requestMsg[PAYLOAD_MAX_LEN]);
@@ -52,8 +53,12 @@ char* getLocalIp_s(char* device){
 }
 
 int clientRequest(int socket, int protocol, char source_ip[IPV4STR_MAX_LEN], char dest_ip[IPV4STR_MAX_LEN], int dest_port, char requestMsg[PAYLOAD_MAX_LEN]){
+    if(verbose != 1) printf("requesting...  ");
+    fflush(stdout);
+    handledCount++;
     struct sockaddr_in serv_addr;
     char finalMsg[MESSAGE_MAX_LEN];
+    memset(&finalMsg, '\0', MESSAGE_MAX_LEN);
 
     //check if port open, or get available free port if port is 0
     int ifavl = -1;
@@ -65,12 +70,11 @@ int clientRequest(int socket, int protocol, char source_ip[IPV4STR_MAX_LEN], cha
 
         if(bind(socket, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) >= 0)  ifavl = 1;
     }
-// int tcp_request(int socket, int destPort, struct sockaddr_in serv_addr, char dest_ip[IPV4STR_MAX_LEN], char requestMsg[PAYLOAD_MAX_LEN], char* finalMsg, Packet_hint_pointers (* focusedAddrses)[MAX_CONNECTIONS]){
 
     switch(protocol){
         case 6:                                        //standard tcp
 // int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int dest_port, char src_ip[IPV4STR_MAX_LEN], int src_port, char requestMsg[PAYLOAD_MAX_LEN], char* finalMsg){
-            tcp_request_singleThread(socket, dest_ip, dest_port, source_ip, ntohs(serv_addr.sin_port), requestMsg, (char *) &finalMsg);
+            tcp_request_wTimeout(3, socket, dest_ip, dest_port, source_ip, ntohs(serv_addr.sin_port), requestMsg, (char *) &finalMsg);
             break;
         case 206:                                      //custom tcp
             break;
@@ -81,77 +85,67 @@ int clientRequest(int socket, int protocol, char source_ip[IPV4STR_MAX_LEN], cha
             break;
     }
 
-    if(strlen(finalMsg) > 0)    printf("Received:  %s\n", finalMsg);
+    if(strlen(finalMsg) > 0) printf("Received:  %s\n", finalMsg);
     return 1;
 }
 
 int receivePacket(Rsock_packet* rPacket, int sock_r){
 	//reception of the network packet || receive the network packet
-	unsigned char *buffer = (unsigned char *) malloc(65536); //max buffer memory size
-	memset(buffer, 0, 65536);
+	rPacket->pBuffer = (unsigned char *) malloc(65536); //max buffer memory size
+	memset(rPacket->pBuffer, 0, 65536);
 
 	//receive a network packet and copy in to buffer
 	struct sockaddr saddr;
 	int saddr_len = sizeof(saddr);
-	int buflen = recvfrom(sock_r, buffer, 65536, 0, &saddr, (socklen_t *)&saddr_len);
+	int buflen = recvfrom(sock_r, rPacket->pBuffer, 65536, 0, &saddr, (socklen_t *)&saddr_len);
 	if(buflen < 0) {
-        free(buffer);
+        free(rPacket->pBuffer);
 		return -1;
 	}
 
-	//extract ethernet header                                   ETHERNET
-    memcpy(&rPacket->eth, buffer, sizeof(struct ethhdr));
+	//point to ethernet header                                   ETHERNET
+    rPacket->eth = (struct ethhdr *)(rPacket->pBuffer);
 
-	//extract ip header & get ips of source and destination     IP
-    memcpy(&rPacket->ip, (buffer + sizeof(struct ethhdr)), sizeof(struct iphdr));
-	struct sockaddr_in source, dest;
-	source.sin_addr.s_addr = rPacket->ip.saddr;
-	dest.sin_addr.s_addr = rPacket->ip.daddr;
-
-	rPacket->source = source;
-	rPacket->dest = dest;
-	rPacket->protocol = rPacket->ip.protocol;
+	//point to ip header & get ips of source and destination     IP
+	rPacket->ip = (struct iphdr*)(rPacket->pBuffer + sizeof(struct ethhdr));
+	rPacket->source.sin_addr.s_addr = rPacket->ip->saddr;
+	rPacket->dest.sin_addr.s_addr = rPacket->ip->daddr;
+	rPacket->protocol = rPacket->ip->protocol;
 
 	//extract transport layer header                            TRANSPORT
-	int iphdrlen = rPacket->ip.ihl * 4;// getting size of IP header from header (more accurate/foolproof)
+	int iphdrlen = rPacket->ip->ihl * 4;// getting size of IP header from header (more accurate/foolproof)
 	switch(rPacket->protocol){
 		case 6:
 			//tcp
-            memcpy(&rPacket->tcp, (buffer + iphdrlen + sizeof(struct ethhdr)), sizeof(struct tcphdr));
+			rPacket->tcp = (struct tcphdr*)( rPacket->pBuffer + iphdrlen + sizeof(struct ethhdr));
 
-			rPacket->payload_len = ntohs(rPacket->ip.tot_len) - (rPacket->ip.ihl<<2) - (rPacket->tcp.doff * 4);
-            if(rPacket->payload_len <= PAYLOAD_MAX_LEN)
-                strncpy((char *)&rPacket->payload, (char *)(buffer + iphdrlen  + sizeof(struct ethhdr) + rPacket->tcp.doff * 4), rPacket->payload_len);
-            else
-                strcpy((char *)&rPacket->payload, "error(-1)");
+			rPacket->payload_len = ntohs(rPacket->ip->tot_len) - (rPacket->ip->ihl<<2) - (rPacket->tcp->doff * 4);
+			rPacket->payload = (unsigned char *) (rPacket->pBuffer + iphdrlen  + sizeof(struct ethhdr) + rPacket->tcp->doff * 4);
+            // memset((rPacket->payload + rPacket->payload_len) , '\0', 1);
 
 			break;
 		case 17:
 			//UDP
-            memcpy(&rPacket->udp, (buffer + iphdrlen + sizeof(struct ethhdr)), sizeof(struct udphdr));
-
+			rPacket->udp = (struct udphdr*)( rPacket->pBuffer + iphdrlen + sizeof(struct ethhdr));
+            
 			rPacket->payload_len = buflen - (iphdrlen + sizeof(struct ethhdr) + sizeof(struct udphdr));
-            if(rPacket->payload_len <= PAYLOAD_MAX_LEN)
-                strncpy((char *)&rPacket->payload, (char *)(buffer + iphdrlen  + sizeof(struct ethhdr) + sizeof(struct udphdr)), rPacket->payload_len);
-            else
-                strcpy((char *)&rPacket->payload, "error(-1)");
+			rPacket->payload = (unsigned char *) (rPacket->pBuffer + iphdrlen  + sizeof(struct ethhdr) + sizeof(struct udphdr));
+            // memset((rPacket->payload + rPacket->payload_len) , '\0', 1);
 
 			break;
 		default:
 			//other
 			rPacket -> other = 1;
 			rPacket->payload_len = buflen - (iphdrlen + sizeof(struct ethhdr));
-            strncpy((char *)&rPacket->payload, (char *)(buffer + iphdrlen  + sizeof(struct ethhdr)), rPacket->payload_len);
+			rPacket->payload = (unsigned char *)(rPacket->pBuffer + iphdrlen  + sizeof(struct ethhdr));
 			break;
 	}
 
-	rPacket -> pPacket = buffer;
-
 	return 1;
-	//TODO: make remaining data
 }
 
 
+//for "multithread", combine all the listenForPacket() into one socket
 void* receiveThread(void* vargp){
     Packet_hint_pointers (*focusedAddrses)[MAX_CONNECTIONS] = ((ReceiveThread_args *)vargp)->focusedAddrses;
     Settings_struct* settings = ((ReceiveThread_args *)vargp)->settings;
@@ -169,15 +163,15 @@ void* receiveThread(void* vargp){
         for(int i=0; i < MAX_CONNECTIONS; i++){
             if((*focusedAddrses)[i].flag != 0 && (*focusedAddrses)[i].flag != 404){
                 if(strcmp((*focusedAddrses)[i].RemoteIpAddr, inet_ntoa(receive.source.sin_addr)) == 0
-                  && htons(receive.tcp.dest) == (*focusedAddrses)[i].local_port
-                  && htons(receive.tcp.source) == (*focusedAddrses)[i].remote_port
+                  && htons(receive.tcp->dest) == (*focusedAddrses)[i].local_port
+                  && htons(receive.tcp->source) == (*focusedAddrses)[i].remote_port
                   && strcmp((*focusedAddrses)[i].LocalIpAddr, inet_ntoa((receive.dest).sin_addr)) == 0) {
                     
                       
                 }
             }
         }
-        free(receive.pPacket);
+        free(receive.pBuffer);
     }
     return NULL;
 }

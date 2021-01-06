@@ -191,6 +191,15 @@ void* commandThread(void* vargp) {
                 }
                 in_progress = -1;
             }
+        }else if (strcmp(command, "clear") == 0){
+            printf("\33[2J");
+        }else if (strcmp(command, "animation") == 0){
+            if(pParam != NULL){
+                if(strcmp(pParam + 1, "false") == 0 || strcmp(pParam + 1, "off") == 0) animation = 0;
+                else animation = 1;
+            }else{
+                animation = 1;
+            }
         }else{
             printf("Invalid Command.\n");
         }

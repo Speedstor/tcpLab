@@ -9,6 +9,8 @@
 #include <sys/time.h>
 #include <math.h>
 
+#include "../global/global.h"
+
 #ifndef STATUS_BUFFER_MAX
 #define STATUS_BUFFER_MAX 1200
 #endif
@@ -133,21 +135,22 @@ void getProgressBarString(int percentage, char* progressText){
 
 //don't put in newline, or else it does not have a expectance checker yet
 void progressBar_print(int percentage, char* format, ...){
-    char progressBar[48];
-    getProgressBarString(percentage, (char *) &progressBar);
-    printf("\33[2K %s ", progressBar);
+    if(verbose || percentage > 100){
+        if(percentage > 1000) percentage -= 1000;
+        char progressBar[48];
+        getProgressBarString(percentage, (char *) &progressBar);
+        printf("\33[2K %s ", progressBar);
 
 
-    va_list args;
-    va_start(args, format);
-    vprintf(format, args);
-    va_end(args);
+        va_list args;
+        va_start(args, format);
+        vprintf(format, args);
+        va_end(args);
 
-    printf("\r");
-    fflush(stdout);
-}
-
-
+        printf("\r");
+        fflush(stdout);
+    }
+} 
 
 
 char* FileToString(char* path){

@@ -53,22 +53,22 @@
 #ifndef RAW_SOCKET_PACKET
 #define RAW_SOCKET_PACKET
     typedef struct Rsock_packet{
-        struct ethhdr eth;
-        struct iphdr ip;
+        struct ethhdr* eth;
+        struct iphdr* ip;
         struct sockaddr_in source;
         struct sockaddr_in dest;
 
         int protocol;
         union{
-            struct tcphdr tcp;
-            struct udphdr udp;
+            struct tcphdr* tcp;
+            struct udphdr* udp;
             int other;
         };
 
         int payload_len;
-        char payload[PAYLOAD_MAX_LEN];
+        unsigned char* payload;
 
-        unsigned char* pPacket;
+        unsigned char* pBuffer;
     }Rsock_packet;
 #endif
 

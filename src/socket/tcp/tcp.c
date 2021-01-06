@@ -33,7 +33,7 @@ void* tcpHandleRequest_singleThread(void* vargp){
     char predefinedResponse[MESSAGE_MAX_LEN];
     strcpy(predefinedResponse, hints->msg);
 
-    printf("%s | %s | %s\n\n", hints->RemoteIpAddr, hints->LocalIpAddr, hints->msg);
+    progressBar_print(1, "start handling req: %s", hints->RemoteIpAddr);
 
     struct addrinfo *dest, *source;
     int error = getaddrinfo(hints->RemoteIpAddr, NULL, &addr_settings, &dest);
@@ -43,11 +43,13 @@ void* tcpHandleRequest_singleThread(void* vargp){
         return NULL;
     }
 
+    progressBar_print(10, "initialized variables for client req");
+
     Rsock_packet recv_packet;
     char tcpOptions[50];
 
     uint32_t seq = rand() % 1000000000;
-    uint32_t ack_seq = ntohl(hints->pTargetSet->tcp.seq) + 1;
+    uint32_t ack_seq = ntohl(hints->pTargetSet->tcp->seq) + 1;
 
     int send_socket = hints->sock;
 	int recv_socket = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
@@ -55,48 +57,59 @@ void* tcpHandleRequest_singleThread(void* vargp){
         progressBar_print(100, "(-1) open socket error in handle request thread");
     }
 
-    printf("send socket: %d", send_socket);
+    progressBar_print(20, "send socket: %d", send_socket);
 
     //send sync ack
     sprintf(tcpOptions, "sa\t%d\t%d\t", seq, ack_seq);
     tcp_sendPacket(send_socket, hints->local_port, hints->remote_port, dest, source, "", tcpOptions);
 
-    progressBar_print(20, "sent syn + ack packet");
+    // progressBar_print(30, "sent syn + ack packet\n\n");
 
     //last handshake packet: get psh ack and parse data (the upload request string)
     listenForPacket(&recv_packet, recv_socket, 6, (char *) &hints->LocalIpAddr, hints->local_port, (char *) &hints->RemoteIpAddr, hints->remote_port, seq);
     //ack packet
-    ack_seq = ntohl(recv_packet.tcp.seq) + recv_packet.payload_len;
-    if(recv_packet.tcp.syn == 1) ack_seq++;
-    sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
-    tcp_sendPacket(send_socket, hints->local_port, hints->remote_port, dest, source, "", tcpOptions);
+    ack_seq = ntohl(recv_packet.tcp->seq) + recv_packet.payload_len;
+    if(recv_packet.tcp->syn == 1) ack_seq++;
+    // sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
+    // tcp_sendPacket(send_socket, hints->local_port, hints->remote_port, dest, source, "", tcpOptions);
     
-    if(recv_packet.tcp.rst == 1){
+    if(recv_packet.tcp->rst == 1){
         progressBar_print(100, "acknowledge skipped || lost packet || error in ip");
         return NULL;
-    }else if(recv_packet.tcp.psh != 1 && recv_packet.tcp.ack != 1){
+    }else if(recv_packet.tcp->psh != 1 && recv_packet.tcp->ack != 1){
         progressBar_print(100, "unkown flag condition!!");
         return NULL;
     }
-    progressBar_print(30, "received request details--");
+    progressBar_print(40, "received request details--");
         
 
     //send data/response
     // seq = ntohl(recv_packet.tcp.ack_seq);
-    ack_seq = ntohl(recv_packet.tcp.seq) + 1; //add one for the syn flag
-    sprintf(tcpOptions, "p\t%d\t%d\t", seq, ack_seq);
+    ack_seq = ntohl(recv_packet.tcp->seq) + 1; //add one for the syn flag
+    sprintf(tcpOptions, "a\t%d\t%d\t", seq, ack_seq);
     tcp_sendPacket(send_socket, hints->local_port, hints->remote_port, dest, source, predefinedResponse, tcpOptions);
     //TODO: instead of predefinedResponse, send response according to request
 
-    listenForPacket(&recv_packet, recv_socket, 6, (char *) &hints->LocalIpAddr, hints->local_port, (char *) &hints->RemoteIpAddr, hints->remote_port,  seq+=1);
-    if(recv_packet.tcp.ack == 1) //normal behavior;
+    progressBar_print(50, "sent response to client");
+
+    listenForPacket(&recv_packet, recv_socket, 6, (char *) &hints->LocalIpAddr, hints->local_port, (char *) &hints->RemoteIpAddr, hints->remote_port,  seq+=strlen(predefinedResponse));
+    if(recv_packet.tcp->ack == 1) //normal behavior;
+    
+    progressBar_print(70, "finished data exchange, going to end tcp stream");
 
     //fin, psh, ack
     sprintf(tcpOptions, "fpa\t%d\t%d\t", seq, ack_seq);
     tcp_sendPacket(send_socket, hints->local_port, hints->remote_port, dest, source, "", tcpOptions);
     
-    progressBar_print(100, "Finished, sent data");
-    
+    progressBar_print(100, "[%d] Finished, sent data: %s", handledCount, hints->RemoteIpAddr);
+    if(verbose){
+        printf("\n");
+    }else{
+        if(animation){
+            printf("\33[2K\r[-] server open and waiting for requests [-]   (handled: %d)", handledCount);
+        }
+    }
+
     return NULL;
 }
 
@@ -142,22 +155,22 @@ int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int
      * Receive syn&ack Packet  ------
      */
     listenForPacket(&recv_packet, recv_socket, 6, src_ip, src_port,dest_ip, dest_port,  seq);
-    //send acknowledge first
-    ack_seq = ntohl(recv_packet.tcp.seq) + recv_packet.payload_len;
-    if(recv_packet.tcp.syn == 1) ack_seq++;
+    ack_seq = ntohl(recv_packet.tcp->seq) + recv_packet.payload_len;
+    if(recv_packet.tcp->syn == 1) ack_seq++;
+    // //send acknowledge first
     // sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
     // tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
 
-    if(recv_packet.tcp.rst == 1){
+    if(recv_packet.tcp->rst == 1){
         progressBar_print(100, "tcp received reset flag, stopped process");
         return -1;
-    }else if (recv_packet.tcp.syn != 1 && recv_packet.tcp.ack != 1){
+    }else if (recv_packet.tcp->syn != 1 && recv_packet.tcp->ack != 1){
         progressBar_print(100, "unkown flag condition!!");
         return -1;
     }
 
     progressBar_print(30, "received, fin 3-way handshake");
-    //END: finish handshake --------------------------------------------------------------------------------------------
+    //END: finish handshake w/ vv --------------------------------------------------------------------------------------------
 
     /**
      * send "Third" Packet  ------
@@ -174,7 +187,7 @@ int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int
      * Receive ack Packet  ------
      */
     listenForPacket(&recv_packet, recv_socket, 6, src_ip, src_port, dest_ip, dest_port, seq+=strlen(requestMsg));
-    if(recv_packet.tcp.ack == 1) //normal behavior; TODO: else and handle exception
+    if(recv_packet.tcp->ack == 1) //normal behavior; TODO: else and handle exception
     
     progressBar_print(39, "received ack packet");
 
@@ -183,12 +196,12 @@ int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int
      */
     listenForPacket(&recv_packet, recv_socket, 6,  src_ip, src_port,dest_ip, dest_port, seq);
     //send acknowledge first
-    ack_seq = ntohl(recv_packet.tcp.seq) + recv_packet.payload_len; //
-    if(recv_packet.tcp.syn == 1) ack_seq++;
+    ack_seq = ntohl(recv_packet.tcp->seq) + recv_packet.payload_len; //
+    if(recv_packet.tcp->syn == 1) ack_seq++;
     sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
     tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
 
-    strcpy(finalMsg, recv_packet.payload);
+    strncpy(finalMsg, (char *) recv_packet.payload, recv_packet.payload_len);
 
     // progressBar_print(61, "received message from server");
 
@@ -196,7 +209,7 @@ int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int
      * Receive remaining Packets  ------
      */
     listenForPacket(&recv_packet, recv_socket, 6, src_ip, src_port, dest_ip, dest_port, seq);
-    if(recv_packet.tcp.fin == 1){
+    if(recv_packet.tcp->fin == 1){
         sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
         tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
 
@@ -206,13 +219,76 @@ int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int
         //TODO: keep adding to the finalMsg or react to the flags
     }
 
-    progressBar_print(100, "received message from server");
-    printf("\n");
+    progressBar_print(100, "[%d] Finished:: received message from server", handledCount);
+    if(verbose){
+        printf("\n");
+    }
 
     // end_progressBar(0);
     return 1;
 }
 
+struct tcpArgs{
+    int send_socket;
+    char* dest_ip;
+    int dest_port;
+    char* src_ip;
+    int src_port;
+    char* requestMsg;
+    char* finalMsg;
+    pthread_cond_t done;
+};
+
+void* tcp_request_pass(void* argsParam){
+    pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
+    
+    struct tcpArgs* args = (struct tcpArgs*) argsParam;
+    tcp_request_singleThread(args->send_socket, args->dest_ip, args->dest_port, args->src_ip, args->src_port, args->requestMsg, args->finalMsg);
+
+    pthread_cond_signal(&args->done);
+    return NULL;
+}
+
+int tcp_request_wTimeout(int timeoutSec, int send_socket, char dest_ip[IPV4STR_MAX_LEN], int dest_port, char src_ip[IPV4STR_MAX_LEN], int src_port, char* requestMsg, char* finalMsg){
+    struct tcpArgs args = {
+        send_socket,
+        dest_ip,
+        dest_port,
+        src_ip,
+        src_port,
+        requestMsg,
+        finalMsg,
+        PTHREAD_COND_INITIALIZER
+    };
+    pthread_mutex_t inProcess = PTHREAD_MUTEX_INITIALIZER;
+    pthread_t thread_id;
+    int success = 1;
+
+    pthread_mutex_lock(&inProcess);
+    // struct timespec max_wait;
+    // memset(&max_wait, 0, sizeof(max_wait));
+    // max_wait.tv_sec = timeoutSec;
+    struct timespec abs_time;
+    clock_gettime(CLOCK_REALTIME, &abs_time);
+    abs_time.tv_sec += timeoutSec;
+    // abs_time.tv_sec += max_wait.tv_sec;
+    // abs_time.tv_nsec += max_wait.tv_nsec;
+
+
+    pthread_create(&thread_id, NULL, tcp_request_pass, &args);
+
+    int ifTimeout = pthread_cond_timedwait(&args.done, &inProcess, &abs_time);
+    if (ifTimeout == ETIMEDOUT){
+        if(verbose)     progressBar_print(100, "(-1) TIMEOUT: tcp request timeout (%ds): %s\n", timeoutSec, dest_ip);
+        else            printf("tcp request timeout   || \n");
+        success = -1;
+    }
+
+    pthread_mutex_unlock(&inProcess);
+    pthread_cancel(thread_id);
+    pthread_join(thread_id, NULL);
+    return success;
+}
 
 //if success return packet length
 int tcp_sendPacket(int sock, int src_port, int dst_port, struct addrinfo *dest, struct addrinfo *source, char message[PAYLOAD_MAX_LEN], char* pOptions){

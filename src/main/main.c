@@ -13,9 +13,13 @@ int main(int argc, char **argv) {
     addr_settings.ai_protocol = IPPROTO_RAW;
 
     cycle_running = 0;
-    in_progress = -1;
-    recordDB = -1;
-    ifMultithread = -1;
+    in_progress = 0;
+    recordDB = 0;
+    ifMultithread = 0;
+    verbose = 0;
+    animation = 1;
+
+    handledCount = 0;
 
     //a store of addresses to keep track of what is of interest and in store
     Packet_hint_pointers focusedAddrses[MAX_CONNECTIONS];                       
@@ -41,7 +45,7 @@ int main(int argc, char **argv) {
     //receive args -------------
     char c;
     while (1) {
-        c = getopt_long(argc, argv, "hrSRBPM:s:d:p:i:m:", NULL, NULL);
+        c = getopt_long(argc, argv, "DvMhrSRBP:s:d:p:i:m:", NULL, NULL);
         if (c == -1) break;
 
         switch (c) {
@@ -88,9 +92,15 @@ int main(int argc, char **argv) {
                 return -1;
             }
             break;
+        case 'v':
+            verbose = 1;
+            break;
         case 'M':
             printf("multithread not supported in sending yet, but the functional thread is functional in receiving packets (meaning its there but its useless)\n");
             ifMultithread = 1;
+            break;
+        case 'D':
+            animation = -1;
             break;
         case '?': //help
         case 'h':
@@ -118,9 +128,9 @@ int main(int argc, char **argv) {
     //SECTION: start of program
     running = 1;
     //setup socket
-    // settings.sendSocket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    settings.sendSocket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
 	settings.receiveSocket = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
-    if (/* settings.sendSocket < 0 || */ settings.receiveSocket < 0) {
+    if (settings.sendSocket < 0 || settings.receiveSocket < 0) {
         printf("socket opening error:: !might need root privileges\n");
         return -1;
     }
@@ -136,70 +146,30 @@ int main(int argc, char **argv) {
         pthread_create(&receiveThread_id, NULL, receiveThread, &rArgs);
     }
 
-    // if(settings.receive_mode){
-    //     pthread_t serverThread_id;
-    //     pthread_create(&serverThread_id, NULL, serverThread, &rArgs);
-    // }
+    if(settings.receive_mode){
+        pthread_t serverThread_id;
+        pthread_create(&serverThread_id, NULL, serverThread, &rArgs);
+    }
 
     //stall
     printf("program initialized, stalling... (1): --\n");
-    if(settings.receive_mode){
-        while(1){
-            Rsock_packet recv_packet;
-            /* int success =  */receivePacket(&recv_packet, settings.receiveSocket);
 
-            if(recv_packet.protocol != 6){
-                free(recv_packet.pPacket);
-                continue;
-            }
-            if(strcmp(settings.source_ip, inet_ntoa((recv_packet.dest).sin_addr)) == 0
-               && htons(recv_packet.tcp.dest) == settings.port) {
-                printf("received\n");
-                fflush(stdout); 
+    char loadingChars[4] = "\\|/-";
+    int loadIndex = 0;
+    while(running){
+        if(animation){
+            if(settings.receive_mode){
+                printf("\r[%c] server open and waiting for requests [%c]", loadingChars[loadIndex],  loadingChars[loadIndex]);
+                fflush(stdout);
+                loadIndex++;
+                if(loadIndex >= 4) loadIndex = 0;
             }
         }
-        // while(1){
-        //     Rsock_packet receive;
-        //     receivePacket(&receive, settings.receiveSocket);
-
-        //     if(/* strcmp(settings.source_ip, inet_ntoa((receive.dest).sin_addr)) == 0 && */ htons(receive.tcp.dest) == settings.port && receive.tcp.syn == 1) {
-        //         printf("received\n");
-        //         fflush(stdout);
-                
-        //         // //record it to the packets to be looking out for
-        //         // char sendMessage[MESSAGE_MAX_LEN];
-        //         // strcpy(sendMessage, settings.message);
-        //         // Packet_hint_pointers hints = { "", htons(receive.tcp.source), "", settings.port, &receive, 0, settings.sendSocket, (char*) &sendMessage, 0};
-        //         // strcpy(hints.RemoteIpAddr, inet_ntoa((receive.source).sin_addr));
-        //         // strcpy(hints.LocalIpAddr, settings.source_ip);
-        //         // pthread_t requestHandlerThread_id;
-        //         // pthread_create(&requestHandlerThread_id, NULL, tcpHandleRequest_singleThread, (void *) &hints);
-            
-            
-        //         // //record packet into database
-        //         // char jsonSubmit[19999];
-        //         // char* packetBinSeq = toBinaryString((void *)receive.pPacket,  sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct tcphdr) + receive.payload_len);
-        //         // char* payloadBinSeq = toBinaryString((void *) receive.payload, receive.payload_len);
-        //         // char* timestamp = getTimestamp();
-
-        //         // sprintf(jsonSubmit, "{\"tableName\": \"packet_receive\", \"ifAuto\": true, \"seq\": %d, \"data\": \"%s\", \"packet\": \"%s\", \"time\": \"%s\"}", ntohl(receive.tcp.seq), payloadBinSeq, packetBinSeq, timestamp);
-        //         // db_put((void *) jsonSubmit, 2);
-                
-        //         // free(packetBinSeq);
-        //         // free(payloadBinSeq);
-        //         // free(timestamp);
-        //     }
-        //     // free(receive.pPacket);
-        // }
-    }
-    else{
-        while(running){
-
-        }
+        sleep(1);
     }
 
     //for debugging re-do make
-    printf("modified");
+    // printf("modified");
 }
 
 void usage(){
