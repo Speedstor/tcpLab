@@ -25,7 +25,10 @@ int listenForPacket(Rsock_packet* recv_packet, int socket, int protocol, char de
 	while(1){
 		/* int success =  */receivePacket(recv_packet, socket);
 
-        if(recv_packet->protocol != protocol) continue;
+        if(recv_packet->protocol != protocol){
+            free(recv_packet->pPacket);
+            continue;
+        }
         switch(protocol){
         case 6:
         case 206:
@@ -55,11 +58,13 @@ int listenForPacket(Rsock_packet* recv_packet, int socket, int protocol, char de
                     free(timestamp);
                 }
 
+                free(recv_packet->pPacket);
                 return 1;
             }
             break;
         }
+        free(recv_packet->pPacket);
     }
     //this should never be reached [while(true) above]
-    return 1;
+    return -3;
 }

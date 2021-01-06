@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
     //receive args -------------
     char c;
     while (1) {
-        c = getopt_long(argc, argv, "hrSRPM:s:d:p:i:m:", NULL, NULL);
+        c = getopt_long(argc, argv, "hrSRBPM:s:d:p:i:m:", NULL, NULL);
         if (c == -1) break;
 
         switch (c) {
@@ -74,6 +74,10 @@ int main(int argc, char **argv) {
             settings.receive_mode = 1;
             settings.send_mode = 0;
             break;
+        case 'B':
+            settings.receive_mode = 1;
+            settings.send_mode = 1;
+            break;
         case 'r': //record packets
             recordDB = 1;
             break;
@@ -85,8 +89,8 @@ int main(int argc, char **argv) {
             }
             break;
         case 'M':
-            printf("multithread not supported in sending yet, but is automatic in server receive mode\n");
-            ifMultithread = -1;
+            printf("multithread not supported in sending yet, but the functional thread is functional in receiving packets (meaning its there but its useless)\n");
+            ifMultithread = 1;
             break;
         case '?': //help
         case 'h':
@@ -114,30 +118,84 @@ int main(int argc, char **argv) {
     //SECTION: start of program
     running = 1;
     //setup socket
-    settings.sendSocket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    // settings.sendSocket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
 	settings.receiveSocket = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
-    if (settings.sendSocket < 0 || settings.receiveSocket < 0) {
-        printf("socket opening error [might need root privileges]\n");
+    if (/* settings.sendSocket < 0 || */ settings.receiveSocket < 0) {
+        printf("socket opening error:: !might need root privileges\n");
         return -1;
     }
-
-    //setup receive thread
-    ReceiveThread_args rArgs = {
-        &focusedAddrses,
-        &settings
-    };
-    pthread_t receiveThread_id;
-    pthread_create(&receiveThread_id, NULL, receiveThread, &rArgs);
 
     //setup command thread
     pthread_t commandThread_id;
     pthread_create(&commandThread_id, NULL, commandThread, &settings);
 
+    ReceiveThread_args rArgs = { &focusedAddrses, &settings };
+    if(ifMultithread){
+        //setup receive thread 
+        pthread_t receiveThread_id;
+        pthread_create(&receiveThread_id, NULL, receiveThread, &rArgs);
+    }
+
+    // if(settings.receive_mode){
+    //     pthread_t serverThread_id;
+    //     pthread_create(&serverThread_id, NULL, serverThread, &rArgs);
+    // }
 
     //stall
     printf("program initialized, stalling... (1): --\n");
-    while(running){
-        sleep(1200);
+    if(settings.receive_mode){
+        while(1){
+            Rsock_packet recv_packet;
+            /* int success =  */receivePacket(&recv_packet, settings.receiveSocket);
+
+            if(recv_packet.protocol != 6){
+                free(recv_packet.pPacket);
+                continue;
+            }
+            if(strcmp(settings.source_ip, inet_ntoa((recv_packet.dest).sin_addr)) == 0
+               && htons(recv_packet.tcp.dest) == settings.port) {
+                printf("received\n");
+                fflush(stdout); 
+            }
+        }
+        // while(1){
+        //     Rsock_packet receive;
+        //     receivePacket(&receive, settings.receiveSocket);
+
+        //     if(/* strcmp(settings.source_ip, inet_ntoa((receive.dest).sin_addr)) == 0 && */ htons(receive.tcp.dest) == settings.port && receive.tcp.syn == 1) {
+        //         printf("received\n");
+        //         fflush(stdout);
+                
+        //         // //record it to the packets to be looking out for
+        //         // char sendMessage[MESSAGE_MAX_LEN];
+        //         // strcpy(sendMessage, settings.message);
+        //         // Packet_hint_pointers hints = { "", htons(receive.tcp.source), "", settings.port, &receive, 0, settings.sendSocket, (char*) &sendMessage, 0};
+        //         // strcpy(hints.RemoteIpAddr, inet_ntoa((receive.source).sin_addr));
+        //         // strcpy(hints.LocalIpAddr, settings.source_ip);
+        //         // pthread_t requestHandlerThread_id;
+        //         // pthread_create(&requestHandlerThread_id, NULL, tcpHandleRequest_singleThread, (void *) &hints);
+            
+            
+        //         // //record packet into database
+        //         // char jsonSubmit[19999];
+        //         // char* packetBinSeq = toBinaryString((void *)receive.pPacket,  sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct tcphdr) + receive.payload_len);
+        //         // char* payloadBinSeq = toBinaryString((void *) receive.payload, receive.payload_len);
+        //         // char* timestamp = getTimestamp();
+
+        //         // sprintf(jsonSubmit, "{\"tableName\": \"packet_receive\", \"ifAuto\": true, \"seq\": %d, \"data\": \"%s\", \"packet\": \"%s\", \"time\": \"%s\"}", ntohl(receive.tcp.seq), payloadBinSeq, packetBinSeq, timestamp);
+        //         // db_put((void *) jsonSubmit, 2);
+                
+        //         // free(packetBinSeq);
+        //         // free(payloadBinSeq);
+        //         // free(timestamp);
+        //     }
+        //     // free(receive.pPacket);
+        // }
+    }
+    else{
+        while(running){
+
+        }
     }
 
     //for debugging re-do make
@@ -150,6 +208,7 @@ void usage(){
   -M\t     multithread in sending and receiving (have performance gain) [not implemented in send mode yet]\n\
   -u\t     url to send recorded packets to\n\
   -S/R\t     select send or receive mode (default: -s)\n\
+  -B\t     both send and receive mode\n\
   -P\t     destination port number (default: 8900)\n\
   -s\t     source ip IPv4 address (default: <from chosen device>)\n\
   -d\t     destination ip IPv4 address (default: 127.0.0.1)\n\

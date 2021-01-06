@@ -52,6 +52,7 @@ void* commandThread(void* vargp) {
         }
 
         if (strcmp(command, "") == 0 || strcmp(command, "_") == 0 || strcmp(command, "send") == 0) {
+            if(strcmp(command, "") == 0 && sets->send_mode != 1) continue;
             if (pParam != NULL)
             {
                 char firstParam[100];

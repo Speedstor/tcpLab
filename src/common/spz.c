@@ -5,6 +5,7 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <sys/time.h>
 #include <math.h>
 
@@ -115,7 +116,6 @@ void refresh_progressBar(){
     }
 }
 
-
 void getProgressBarString(int percentage, char* progressText){
     char progressBar[36];
     memset(&progressBar+35, '\0', 1);
@@ -130,6 +130,24 @@ void getProgressBarString(int percentage, char* progressText){
 
     sprintf(progressText, "> [%s]|%d%%|", progressBar, percentage);
 }	
+
+//don't put in newline, or else it does not have a expectance checker yet
+void progressBar_print(int percentage, char* format, ...){
+    char progressBar[48];
+    getProgressBarString(percentage, (char *) &progressBar);
+    printf("\33[2K %s ", progressBar);
+
+
+    va_list args;
+    va_start(args, format);
+    vprintf(format, args);
+    va_end(args);
+
+    printf("\r");
+    fflush(stdout);
+}
+
+
 
 
 char* FileToString(char* path){

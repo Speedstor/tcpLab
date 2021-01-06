@@ -2,7 +2,7 @@
 #define SPZ_COMMON_C_FUNC
     char* FileToString(char* path);
     int msleep(long msec);
-    void getProgressBarString(int percentage, char* progressText);
+    void progressBar_print(int percentage, char* format, ...);
     char* toBinaryString(void* target, int size);
     char* getTimestamp();
 #endif

@@ -24,6 +24,194 @@ unsigned short validate_tcp_checksum(struct iphdr *pIph, unsigned short *ipPaylo
 unsigned short compute_tcp_checksum_withFullPacket(void* fullPacket);
 unsigned short compute_tcp_checksum(struct iphdr *pIph, unsigned short *ipPayload);
 unsigned short compute_tcpcrc_checksum(struct iphdr *pIph, unsigned short *ipPayload);
+int tcp_sendPacket(int sock, int src_port, int dst_port, struct addrinfo *dest, struct addrinfo *source, char message[PAYLOAD_MAX_LEN], char* pOptions);
+
+void* tcpHandleRequest_singleThread(void* vargp){
+    //receive sync
+    Packet_hint_pointers* hints;
+    hints = vargp;
+    char predefinedResponse[MESSAGE_MAX_LEN];
+    strcpy(predefinedResponse, hints->msg);
+
+    printf("%s | %s | %s\n\n", hints->RemoteIpAddr, hints->LocalIpAddr, hints->msg);
+
+    struct addrinfo *dest, *source;
+    int error = getaddrinfo(hints->RemoteIpAddr, NULL, &addr_settings, &dest);
+    error = getaddrinfo(hints->LocalIpAddr, NULL, &addr_settings, &source);
+    if (error) {
+        printf("Destination ip invalid: %s\n", hints->RemoteIpAddr);
+        return NULL;
+    }
+
+    Rsock_packet recv_packet;
+    char tcpOptions[50];
+
+    uint32_t seq = rand() % 1000000000;
+    uint32_t ack_seq = ntohl(hints->pTargetSet->tcp.seq) + 1;
+
+    int send_socket = hints->sock;
+	int recv_socket = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+    if(send_socket < 0 || recv_socket < 0){
+        progressBar_print(100, "(-1) open socket error in handle request thread");
+    }
+
+    printf("send socket: %d", send_socket);
+
+    //send sync ack
+    sprintf(tcpOptions, "sa\t%d\t%d\t", seq, ack_seq);
+    tcp_sendPacket(send_socket, hints->local_port, hints->remote_port, dest, source, "", tcpOptions);
+
+    progressBar_print(20, "sent syn + ack packet");
+
+    //last handshake packet: get psh ack and parse data (the upload request string)
+    listenForPacket(&recv_packet, recv_socket, 6, (char *) &hints->LocalIpAddr, hints->local_port, (char *) &hints->RemoteIpAddr, hints->remote_port, seq);
+    //ack packet
+    ack_seq = ntohl(recv_packet.tcp.seq) + recv_packet.payload_len;
+    if(recv_packet.tcp.syn == 1) ack_seq++;
+    sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
+    tcp_sendPacket(send_socket, hints->local_port, hints->remote_port, dest, source, "", tcpOptions);
+    
+    if(recv_packet.tcp.rst == 1){
+        progressBar_print(100, "acknowledge skipped || lost packet || error in ip");
+        return NULL;
+    }else if(recv_packet.tcp.psh != 1 && recv_packet.tcp.ack != 1){
+        progressBar_print(100, "unkown flag condition!!");
+        return NULL;
+    }
+    progressBar_print(30, "received request details--");
+        
+
+    //send data/response
+    // seq = ntohl(recv_packet.tcp.ack_seq);
+    ack_seq = ntohl(recv_packet.tcp.seq) + 1; //add one for the syn flag
+    sprintf(tcpOptions, "p\t%d\t%d\t", seq, ack_seq);
+    tcp_sendPacket(send_socket, hints->local_port, hints->remote_port, dest, source, predefinedResponse, tcpOptions);
+    //TODO: instead of predefinedResponse, send response according to request
+
+    listenForPacket(&recv_packet, recv_socket, 6, (char *) &hints->LocalIpAddr, hints->local_port, (char *) &hints->RemoteIpAddr, hints->remote_port,  seq+=1);
+    if(recv_packet.tcp.ack == 1) //normal behavior;
+
+    //fin, psh, ack
+    sprintf(tcpOptions, "fpa\t%d\t%d\t", seq, ack_seq);
+    tcp_sendPacket(send_socket, hints->local_port, hints->remote_port, dest, source, "", tcpOptions);
+    
+    progressBar_print(100, "Finished, sent data");
+    
+    return NULL;
+}
+
+int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int dest_port, char src_ip[IPV4STR_MAX_LEN], int src_port, char* requestMsg, char* finalMsg){
+    progressBar_print(1, "started tcp request");
+    Rsock_packet recv_packet;
+
+    progressBar_print(10, "client: %d | %s", src_port, src_ip);
+
+    struct addrinfo *dest, *source;
+    int error = getaddrinfo(dest_ip, NULL, &addr_settings, &dest);
+    error = getaddrinfo(src_ip, NULL, &addr_settings, &source);
+    if (error) {
+        printf("Destination ip invalid: %s\n", dest_ip);
+        return -1;
+    }
+
+    //initialize random sequence number
+    uint32_t seq = rand() % 1000000000;
+    uint32_t ack_seq = 0;
+    char tcpOptions[50];
+
+    //setup receive send_socket first so it won't take time in between the sending and receiving and miss the packet
+    int recv_socket = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+
+    progressBar_print(20, "initiating tcp handshake...");
+    /**
+     * First Packet  ------
+     */
+    sprintf(tcpOptions, "s\t%d\t%d\t", seq, ack_seq);
+    tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
+
+    progressBar_print(25, "waiting response...");
+    
+
+    // /**
+    //  * Receive ack Packet  ------
+    //  */
+    // listenForPacket(&recv_packet, recv_socket, 6, dest_ip, dest_port, src_ip, src_port, seq+=1);
+    // if(recv_packet.tcp.ack != 1) //normal behavior; TODO: else and handle exception
+
+    /**
+     * Receive syn&ack Packet  ------
+     */
+    listenForPacket(&recv_packet, recv_socket, 6, src_ip, src_port,dest_ip, dest_port,  seq);
+    //send acknowledge first
+    ack_seq = ntohl(recv_packet.tcp.seq) + recv_packet.payload_len;
+    if(recv_packet.tcp.syn == 1) ack_seq++;
+    // sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
+    // tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
+
+    if(recv_packet.tcp.rst == 1){
+        progressBar_print(100, "tcp received reset flag, stopped process");
+        return -1;
+    }else if (recv_packet.tcp.syn != 1 && recv_packet.tcp.ack != 1){
+        progressBar_print(100, "unkown flag condition!!");
+        return -1;
+    }
+
+    progressBar_print(30, "received, fin 3-way handshake");
+    //END: finish handshake --------------------------------------------------------------------------------------------
+
+    /**
+     * send "Third" Packet  ------
+     */
+    // seq = ntohl(recv_packet.tcp.ack_seq);                                            //WARNING: remove not tested yet
+    // ack_seq = ntohl(recv_packet.tcp.seq) + 1; //add one for the syn flag             //WARNING: remove not tested yet
+
+    sprintf(tcpOptions, "pa\t%d\t%d\t", seq, ack_seq);
+    tcp_sendPacket(send_socket, src_port, dest_port, dest, source, requestMsg, tcpOptions);
+
+    progressBar_print(39, "sent request string");
+
+    /**
+     * Receive ack Packet  ------
+     */
+    listenForPacket(&recv_packet, recv_socket, 6, src_ip, src_port, dest_ip, dest_port, seq+=strlen(requestMsg));
+    if(recv_packet.tcp.ack == 1) //normal behavior; TODO: else and handle exception
+    
+    progressBar_print(39, "received ack packet");
+
+    /**
+     * Receive data Packet  ------
+     */
+    listenForPacket(&recv_packet, recv_socket, 6,  src_ip, src_port,dest_ip, dest_port, seq);
+    //send acknowledge first
+    ack_seq = ntohl(recv_packet.tcp.seq) + recv_packet.payload_len; //
+    if(recv_packet.tcp.syn == 1) ack_seq++;
+    sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
+    tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
+
+    strcpy(finalMsg, recv_packet.payload);
+
+    // progressBar_print(61, "received message from server");
+
+    /**
+     * Receive remaining Packets  ------
+     */
+    listenForPacket(&recv_packet, recv_socket, 6, src_ip, src_port, dest_ip, dest_port, seq);
+    if(recv_packet.tcp.fin == 1){
+        sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
+        tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
+
+        sprintf(tcpOptions, "f\t%u\t%u\t", seq, ack_seq);
+        tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
+    }else{
+        //TODO: keep adding to the finalMsg or react to the flags
+    }
+
+    progressBar_print(100, "received message from server");
+    printf("\n");
+
+    // end_progressBar(0);
+    return 1;
+}
 
 
 //if success return packet length
@@ -138,138 +326,6 @@ int tcp_sendPacket(int sock, int src_port, int dst_port, struct addrinfo *dest, 
     return packetsize;
 }
 
-int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int dest_port, char src_ip[IPV4STR_MAX_LEN], int src_port, char* requestMsg, char* finalMsg){
-    char progressBar[150];
-    getProgressBarString(1, (char *) &progressBar);
-    printf("\33[2K %s started tcp request\r", progressBar);
-    fflush(stdout);
-    Rsock_packet recv_packet;
-
-    getProgressBarString(10, (char *) &progressBar);
-    printf("\33[2K %s src port number %d || addr: %s\r", progressBar, src_port, src_ip);
-    fflush(stdout);
-
-    struct addrinfo *dest, *source;
-    int error = getaddrinfo(dest_ip, NULL, &addr_settings, &dest);
-    error = getaddrinfo(src_ip, NULL, &addr_settings, &source);
-    if (error) {
-        printf("Destination ip invalid: %s\n", dest_ip);
-        return -1;
-    }
-
-    //initialize random sequence number
-    uint32_t seq = rand() % 1000000000;
-    uint32_t ack_seq = 0;
-    char tcpOptions[50];
-
-    //setup receive send_socket first so it won't take time in between the sending and receiving and miss the packet
-    int recv_socket = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
-
-    getProgressBarString(20, (char *) &progressBar);
-    printf("\33[2K %s initiating tcp handshake...\r", progressBar);
-    fflush(stdout);
-    /**
-     * First Packet  ------
-     */
-    sprintf(tcpOptions, "s\t%d\t%d\t", seq, ack_seq);
-    tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
-
-    getProgressBarString(25, (char *) &progressBar);
-    printf("\33[2K %s waiting response...\r", progressBar);
-    fflush(stdout);
-    
-
-    // /**
-    //  * Receive ack Packet  ------
-    //  */
-    // listenForPacket(&recv_packet, recv_socket, 6, dest_ip, dest_port, src_ip, src_port, seq+=1);
-    // if(recv_packet.tcp.ack != 1) //normal behavior; TODO: else and handle exception
-
-    /**
-     * Receive syn&ack Packet  ------
-     */
-    listenForPacket(&recv_packet, recv_socket, 6, dest_ip, dest_port, src_ip, src_port, seq);
-    //send acknowledge first
-    ack_seq = ntohl(recv_packet.tcp.seq) + recv_packet.payload_len;
-    if(recv_packet.tcp.syn == 1) ack_seq++;
-    sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
-    tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
-
-    if(recv_packet.tcp.rst == 1){
-        getProgressBarString(100, (char *) &progressBar);
-        printf("\33[2K %s tcp received reset flag, stopped process\r", progressBar);
-        fflush(stdout);
-        return -1;
-    }else if (recv_packet.tcp.syn != 1 && recv_packet.tcp.ack != 1){
-        getProgressBarString(100, (char *) &progressBar);
-        printf("\33[2K %s unkown flag condition!!\r", progressBar);
-        fflush(stdout);
-        return -1;
-    }
-
-    getProgressBarString(30, (char *) &progressBar);
-    printf("\33[2K %s received, fin 3-way handshake\r", progressBar);
-    fflush(stdout);
-    //END: finish handshake --------------------------------------------------------------------------------------------
-
-    /**
-     * send "Third" Packet  ------
-     */
-    // seq = ntohl(recv_packet.tcp.ack_seq);                                            //WARNING: remove not tested yet
-    // ack_seq = ntohl(recv_packet.tcp.seq) + 1; //add one for the syn flag             //WARNING: remove not tested yet
-
-    sprintf(tcpOptions, "pa\t%d\t%d\t", seq, ack_seq);
-    tcp_sendPacket(send_socket, src_port, dest_port, dest, source, requestMsg, tcpOptions);
-    getProgressBarString(35, (char *) &progressBar);
-    printf("\33[2K %s sent request string\r", progressBar);
-    fflush(stdout);
-
-    /**
-     * Receive ack Packet  ------
-     */
-    listenForPacket(&recv_packet, recv_socket, 6, dest_ip, dest_port, src_ip, src_port, seq+=strlen(requestMsg));
-    if(recv_packet.tcp.ack == 1) //normal behavior; TODO: else and handle exception
-    getProgressBarString(39, (char *) &progressBar);
-    printf("\33[2K %s received ack packet\r", progressBar);
-    fflush(stdout);
-
-    /**
-     * Receive data Packet  ------
-     */
-    listenForPacket(&recv_packet, recv_socket, 6, dest_ip, dest_port, src_ip, src_port, seq);
-    //send acknowledge first
-    ack_seq = ntohl(recv_packet.tcp.seq) + recv_packet.payload_len; //
-    if(recv_packet.tcp.syn == 1) ack_seq++;
-    sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
-    tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
-
-    strcpy(finalMsg, recv_packet.payload);
-
-    getProgressBarString(61, (char *) &progressBar);
-    printf("\33[2K %s received message from server\r", progressBar);
-    fflush(stdout);
-
-    /**
-     * Receive remaining Packets  ------
-     */
-    listenForPacket(&recv_packet, recv_socket, 6, dest_ip, dest_port, src_ip, src_port, seq);
-    if(recv_packet.tcp.fin == 1){
-        sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
-        tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
-
-        sprintf(tcpOptions, "f\t%u\t%u\t", seq, ack_seq);
-        tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
-    }else{
-        //TODO: keep adding to the finalMsg or react to the flags
-    }
-
-    getProgressBarString(100, (char *) &progressBar);
-    printf("\33[2K %s tcp/ip gateway finished and closed\n", progressBar);
-    fflush(stdout);
-
-    // end_progressBar(0);
-    return 1;
-}
 
 
 unsigned short compute_tcp_checksum_withFullPacket(void* fullPacket) {

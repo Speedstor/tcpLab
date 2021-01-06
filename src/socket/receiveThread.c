@@ -19,36 +19,61 @@
 #include <time.h>
 
 #include "../common/definitions.h"
+#include "../common/record.h"
+#include "../common/spz.h"
 #include "./tcp/tcp.h"
 #include "./socketCore.h"
+#include "../global/global.h"
 
 
-void* receiveThread(void* vargp){
-    Packet_hint_pointers (*focusedAddrses)[MAX_CONNECTIONS] = ((ReceiveThread_args *)vargp)->focusedAddrses;
+void* serverThread(void* vargp){
+    // Packet_hint_pointers (*focusedAddrses)[MAX_CONNECTIONS] = ((ReceiveThread_args *)vargp)->focusedAddrses;
     Settings_struct* settings = ((ReceiveThread_args *)vargp)->settings;
 
     int socket = settings->receiveSocket;
 
-	while(1){
-        Rsock_packet receive;
-    	memset(&receive, 0, sizeof(Rsock_packet));
+    switch(settings->protocol){
+    case 6:
+        while(running){
+            Rsock_packet receive;
+            memset(&receive, 0, sizeof(Rsock_packet));
 
-		int rSuccess = receivePacket(&receive, socket);
-        if(rSuccess < 0) continue; //bad packet and error in receiving
+            int rSuccess = receivePacket(&receive, socket);
+            // if(rSuccess < 0) continue; //bad packet and error in receiving
 
-        if(receive.protocol != 6 && receive.protocol != 206) continue; //only tcp packets are supported for now
-        for(int i=0; i < MAX_CONNECTIONS; i++){
-            if((*focusedAddrses)[i].flag != 0 && (*focusedAddrses)[i].flag != 404){
-                if(strcmp((*focusedAddrses)[i].RemoteIpAddr, inet_ntoa(receive.source.sin_addr)) == 0
-                  && htons(receive.tcp.dest) == (*focusedAddrses)[i].local_port
-                  && htons(receive.tcp.source) == (*focusedAddrses)[i].remote_port
-                  && strcmp((*focusedAddrses)[i].LocalIpAddr, inet_ntoa((receive.dest).sin_addr)) == 0) {
+            // if(receive.protocol != settings->protocol) continue; //only tcp packets are supported for now
 
-                      
-                }
+            if(strcmp(settings->source_ip, inet_ntoa((receive.dest).sin_addr)) == 0 && htons(receive.tcp.dest) == settings->port && receive.tcp.syn == 1) {
+                printf("received\n");
+                fflush(stdout);
+                
+                //record it to the packets to be looking out for
+                char sendMessage[MESSAGE_MAX_LEN];
+                strcpy(sendMessage, settings->message);
+                Packet_hint_pointers hints = { "", htons(receive.tcp.source), "", settings->port, &receive, 0, settings->sendSocket, (char*) &sendMessage, 0};
+                strcpy(hints.RemoteIpAddr, inet_ntoa((receive.source).sin_addr));
+                strcpy(hints.LocalIpAddr, settings->source_ip);
+                pthread_t requestHandlerThread_id;
+                pthread_create(&requestHandlerThread_id, NULL, tcpHandleRequest_singleThread, (void *) &hints);
+            
+            
+                //record packet into database
+                char jsonSubmit[19999];
+                char* packetBinSeq = toBinaryString((void *)receive.pPacket,  sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct tcphdr) + receive.payload_len);
+                char* payloadBinSeq = toBinaryString((void *) receive.payload, receive.payload_len);
+                char* timestamp = getTimestamp();
+
+                sprintf(jsonSubmit, "{\"tableName\": \"packet_receive\", \"ifAuto\": true, \"seq\": %d, \"data\": \"%s\", \"packet\": \"%s\", \"time\": \"%s\"}", ntohl(receive.tcp.seq), payloadBinSeq, packetBinSeq, timestamp);
+                db_put((void *) jsonSubmit, 2);
+                
+                free(packetBinSeq);
+                free(payloadBinSeq);
+                free(timestamp);
+            }else{
+                free(receive.pPacket);
             }
         }
-        free(receive.pPacket);
+        break;
     }
     return NULL;
 }
