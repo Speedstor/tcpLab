@@ -13,6 +13,7 @@
 #include "./spz.h"
 #include "../socket/socketCore.h"
 
+void* cycleSendThread(void* vargp);
 
 void printSettings(Settings_struct printSetting){
     printf("\n--- Tcp Lab (send custom udp/mostly tcp socket) ------------------------------------------------------------------\n\
@@ -130,16 +131,27 @@ void* commandThread(void* vargp) {
         }else if (strcmp(command, "exit") == 0 || strcmp(command, "stop") == 0 || strcmp(command, "abort") == 0){
             abort();
         }else if (strcmp(command, "periodic") == 0) {
+            if(pParam != NULL){
+                if(strcmp(pParam + 1, "false") == 0 || strcmp(pParam + 1, "off") == 0 || strcmp(pParam + 1, "end") == 0 || strcmp(pParam + 1, "stop") == 0){
+                    cycle_running = 0;
+                    printf("[periodic:end] ending thread that send requests--\n");
+                    continue;
+                }
+            }
             if(cycle_running == 0) {
                 cycle_running = 1;
                 printf("starting thread to send request--");
-                // pthread_create(&cycle_thread, NULL, pthread_cycle_send, NULL);                                 !!! Aware!!!! TODO::::
+                pthread_create(&cycle_thread, NULL, cycleSendThread, sets);
             }else{
-                printf("A thread is already running and sending requests\n");
+                printf("[periodic] A thread is already running and sending requests\n");
             }
         }else if (strcmp(command, "endPeriodic") == 0){
+            if(cycle_thread){
+                pthread_cancel(cycle_thread);
+                pthread_join(cycle_thread, NULL);
+            }
             cycle_running = 0;
-            printf("ending thread that send requests--\n");
+            printf("[periodic:end] ending thread that send requests--\n");
         }else if (strcmp(command, "emptyDB") == 0){
             //for clean debugging database
             if(in_progress == 1){
@@ -205,4 +217,14 @@ void* commandThread(void* vargp) {
         }
         msleep(150);
     }
+}
+
+void* cycleSendThread(void* vargp){
+    Settings_struct* sets = vargp; 
+    while(cycle_running == 1){
+        clientRequest(sets->sendSocket, sets->protocol, sets->source_ip, sets->dest_ip, sets->port, sets->message);
+        msleep(120);
+    }
+    cycle_running = 0;
+    return NULL;
 }

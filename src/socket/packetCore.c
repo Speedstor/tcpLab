@@ -23,9 +23,9 @@
 //socket has to be with ETH_ALL and be a raw socket [Ex. socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));]
 int listenForPacket(Rsock_packet* recv_packet, int socket, int protocol, char dest_ip[IPV4STR_MAX_LEN], int dest_port, char src_ip[IPV4STR_MAX_LEN], int src_port, int ack_seq){
 	while(1){
-		/* int success =  */receivePacket(recv_packet, socket);
+		int success = receivePacket(recv_packet, socket);
 
-        if(recv_packet->protocol != protocol){
+        if(recv_packet->protocol != protocol || success <= 0){
             free(recv_packet->pBuffer);
             continue;
         }
@@ -72,9 +72,9 @@ int listenForPacket(Rsock_packet* recv_packet, int socket, int protocol, char de
 //socket has to be with ETH_ALL and be a raw socket [Ex. socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));]
 int listenForPacket_sync(Rsock_packet* recv_packet, int socket, int protocol, char dest_ip[IPV4STR_MAX_LEN], int dest_port){
 	while(1){
-		/* int success =  */receivePacket(recv_packet, socket);
+		int success = receivePacket(recv_packet, socket);
 
-        if(recv_packet->protocol != protocol){
+        if(recv_packet->protocol != protocol || success <= 0){
             free(recv_packet->pBuffer);
             continue;
         }

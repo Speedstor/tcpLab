@@ -74,7 +74,7 @@ void* tcpHandleRequest_singleThread(void* vargp){
     // tcp_sendPacket(send_socket, hints->local_port, hints->remote_port, dest, source, "", tcpOptions);
     
     if(recv_packet.tcp->rst == 1){
-        progressBar_print(100, "acknowledge skipped || lost packet || error in ip");
+        progressBar_print(100, "received reset packet");
         return NULL;
     }else if(recv_packet.tcp->psh != 1 && recv_packet.tcp->ack != 1){
         progressBar_print(100, "unkown flag condition!!");
@@ -183,18 +183,18 @@ int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int
 
     progressBar_print(39, "sent request string");
 
-    /**
-     * Receive ack Packet  ------
-     */
-    listenForPacket(&recv_packet, recv_socket, 6, src_ip, src_port, dest_ip, dest_port, seq+=strlen(requestMsg));
-    if(recv_packet.tcp->ack == 1) //normal behavior; TODO: else and handle exception
+    // /**
+    //  * Receive ack Packet  ------
+    //  */
+    // listenForPacket(&recv_packet, recv_socket, 6, src_ip, src_port, dest_ip, dest_port, seq+=strlen(requestMsg));
+    // if(recv_packet.tcp->ack == 1) //normal behavior; TODO: else and handle exception
     
-    progressBar_print(39, "received ack packet");
 
     /**
-     * Receive data Packet  ------
+     * Receive data with ack Packet  ------
      */
     listenForPacket(&recv_packet, recv_socket, 6,  src_ip, src_port,dest_ip, dest_port, seq);
+    if(recv_packet.tcp->ack == 1) //normal behavior; TODO: else and handle exception
     //send acknowledge first
     ack_seq = ntohl(recv_packet.tcp->seq) + recv_packet.payload_len; //
     if(recv_packet.tcp->syn == 1) ack_seq++;
@@ -203,6 +203,7 @@ int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int
 
     strncpy(finalMsg, (char *) recv_packet.payload, recv_packet.payload_len);
 
+    progressBar_print(39, "received ack packet with the data");
     // progressBar_print(61, "received message from server");
 
     /**

@@ -34,6 +34,7 @@ void* serverThread(void* vargp){
     while(1){
         Rsock_packet recv_packet;
         listenForPacket_sync(&recv_packet, sock, settings->protocol, settings->source_ip, settings->port);
+        printf("  request opened");
         handledCount++;
 
         char sendMessage[MESSAGE_MAX_LEN];
