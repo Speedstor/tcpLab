@@ -139,8 +139,7 @@ void progressBar_print(int percentage, char* format, ...){
         if(percentage > 1000) percentage -= 1000;
         char progressBar[48];
         getProgressBarString(percentage, (char *) &progressBar);
-        printf("\33[2K %s ", progressBar);
-
+        printf("\33[2K\r %s ", progressBar);
 
         va_list args;
         va_start(args, format);

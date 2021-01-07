@@ -26,7 +26,6 @@
 #include "../global/global.h"
 #include "./packetCore.h"
 
-
 void* serverThread(void* vargp){
     // Packet_hint_pointers (*focusedAddrses)[MAX_CONNECTIONS] = ((ReceiveThread_args *)vargp)->focusedAddrses;
     Settings_struct* settings = ((ReceiveThread_args *)vargp)->settings;
@@ -43,8 +42,7 @@ void* serverThread(void* vargp){
         strcpy(hints.RemoteIpAddr, inet_ntoa((recv_packet.source).sin_addr));
         strcpy(hints.LocalIpAddr, settings->source_ip);
         pthread_t requestHandlerThread_id;
-        pthread_create(&requestHandlerThread_id, NULL, tcpHandleRequest_singleThread, (void *) &hints);
-
+        pthread_create(&requestHandlerThread_id, NULL, tcpHandleRequest_wTimeout, (void *) &hints);
 
         //record packet into database
         char jsonSubmit[19999];

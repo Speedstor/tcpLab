@@ -265,15 +265,9 @@ int tcp_request_wTimeout(int timeoutSec, int send_socket, char dest_ip[IPV4STR_M
     int success = 1;
 
     pthread_mutex_lock(&inProcess);
-    // struct timespec max_wait;
-    // memset(&max_wait, 0, sizeof(max_wait));
-    // max_wait.tv_sec = timeoutSec;
     struct timespec abs_time;
     clock_gettime(CLOCK_REALTIME, &abs_time);
     abs_time.tv_sec += timeoutSec;
-    // abs_time.tv_sec += max_wait.tv_sec;
-    // abs_time.tv_nsec += max_wait.tv_nsec;
-
 
     pthread_create(&thread_id, NULL, tcp_request_pass, &args);
 
@@ -288,6 +282,53 @@ int tcp_request_wTimeout(int timeoutSec, int send_socket, char dest_ip[IPV4STR_M
     pthread_cancel(thread_id);
     pthread_join(thread_id, NULL);
     return success;
+}
+
+struct tcpHandleRequest_args{
+    void* passArgs;
+    pthread_cond_t done;
+};
+
+
+void* tcpHandleRequest_pass(void* vargp){
+    pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
+    
+    struct tcpHandleRequest_args* args = (struct tcpHandleRequest_args*) vargp;
+    tcpHandleRequest_singleThread(args->passArgs);
+
+    pthread_cond_signal(&args->done);
+    return NULL;
+}
+
+void* tcpHandleRequest_wTimeout(void* vargp){
+    struct tcpHandleRequest_args args = {
+        vargp,
+        PTHREAD_COND_INITIALIZER
+    };
+    pthread_mutex_t inProcess = PTHREAD_MUTEX_INITIALIZER;
+    pthread_t thread_id;
+
+    pthread_mutex_lock(&inProcess);
+    struct timespec abs_time;
+    clock_gettime(CLOCK_REALTIME, &abs_time);
+    abs_time.tv_sec += 10;
+
+    pthread_create(&thread_id, NULL, tcpHandleRequest_pass, &args);
+
+    int ifTimeout = pthread_cond_timedwait(&args.done, &inProcess, &abs_time);
+    pthread_cancel(thread_id);
+    if (ifTimeout == ETIMEDOUT){
+        if(verbose){
+            progressBar_print(100, "(-1) TIMEOUT: tcp request timeout (%ds): %s\n", 10, ((Packet_hint_pointers *) vargp)->RemoteIpAddr);
+        }else{
+            printf("  tcp response timeout   || ");
+            fflush(stdout);
+        }
+    }
+
+    pthread_mutex_unlock(&inProcess);
+    pthread_join(thread_id, NULL);
+    return NULL;
 }
 
 //if success return packet length
