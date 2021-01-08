@@ -1,7 +1,7 @@
 # tcpLab 
 A `C` program that send and receives tcp packets from raw sockets. It can be used for a reference for making custom network protocols given the structure. In addition, the main purpose of this program is to have detailed time recordings of individual packets w/ `-r`.
 
-*"On a side note"*, this program only runs on **linux** and linux only, :( I'm sorry ;(.
+*"On a side note"*, this program only runs on **linux** and linux only, I'm sorry :(.
 <br/><br/><br/>
 
 ## Before you start :hand:
