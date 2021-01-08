@@ -9,14 +9,13 @@ removing automatic reset packets is needed. To do that on ubuntu, just type this
 ```bash
 $ sudo iptables -A OUTPUT -p tcp --tcp-flags RST RST -j DROP
 ```
-<br/><br/><br/>
-
+<br/>
 
 ## Quick Start
 ```bash
 $ sudo ./bin/tcpLab -i \<network-interface\> -\<S / R\>
 ```
-<br/><br/><br/>
+<br/><br/>
 
 
 ### Set Network Interface
@@ -35,7 +34,7 @@ $ iwconfig
 > **wlp1s0**  IEEE 802.11  ESSID:"WIFI-NAME"  
 > &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Mode:Managed  Frequency:2.452 GHz  Access Point: 50:6A:03:A5:6B:8C   
 
-<br/><br/><br/>
+<br/>
 
 ### Options
 > all optional (except sometimes `-i`)
@@ -55,7 +54,7 @@ $ iwconfig
  -h/?   show help
 ```
 
-<br/><br/><br/>
+<br/>
 
 ### Install / Uninstall
 I don't know why you would want to install this, but you are free to do whatever you want :)
