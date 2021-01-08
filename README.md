@@ -21,17 +21,12 @@ The default network interface (*if*) is `wlp1s0`. And if your network interface 
 ```bash
 $ ifconfig
 ```
-> **wlp1s0**: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500<br/>
-> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;inet <your.ip.is.here>  netmask 255.255.255.0  broadcast 192.168.1.255
 
 ~or~
 
 ```bash
 $ iwconfig
 ```
-> **wlp1s0**  IEEE 802.11  ESSID:"WIFI-NAME"  
-> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Mode:Managed  Frequency:2.452 GHz  Access Point: 50:6A:03:A5:6B:8C   
-
 
 ### Options
 > all optional (except sometimes `-i`)
