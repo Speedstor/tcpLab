@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
     //receive args -------------
     char c;
     while (1) {
-        c = getopt_long(argc, argv, "DjvMhrSRBP:s:d:p:i:m:", NULL, NULL);
+        c = getopt_long(argc, argv, "ADjvMhrSRBP:s:d:p:i:m:", NULL, NULL);
         if (c == -1) break;
 
         switch (c) {
@@ -102,6 +102,9 @@ int main(int argc, char **argv) {
             break;
         case 'D':
             animation = 0;
+            break;
+        case 'A':
+            animation = 1;
             break;
         case 'j':
             recordJson = 1;
@@ -176,20 +179,24 @@ int main(int argc, char **argv) {
     if(serverThread_id) pthread_join(serverThread_id, NULL);
 
     //for debugging re-do make
-    // printf("modified");
+    printf("modified");
 }
 
 void usage(){
     printf("---- Tcp/ip Tester --------------------------[help]--\n\
-  -r\t     record packets to database\n\
-  -M\t     multithread in unifed receive (have performance gain) [not implemented]\n\
-  -u\t     url to send recorded packets to\n\
-  -S/R\t     select send or receive mode (default: -s)\n\
-  -B\t     both send and receive mode\n\
-  -P\t     destination port number (default: 8900)\n\
+  -i\t     network interface card that is going to be used (default*: wlp1s0)\n\
   -s\t     source ip IPv4 address (default: <from chosen device>)\n\
   -d\t     destination ip IPv4 address (default: 127.0.0.1)\n\
-  -i\t     network interface card that is going to be used (default*: wlp1s0)\n\
+  -P\t     destination port number (default: 8900)\n\
+  -S/R/B\t     select send or receive mode, B is for both (default: -s)\n\
+  -r\t     if record packets to database\n\
+  -M\t     multithread: unifed receive (have performance gain) [not implemented]\n\
   -m\t     message, payload of the data that going to be sent\n\
-  -p\t     default protocol to send data\n"); //* means should be, for debugging it is actually ens33
+  -p\t     transport network protocol to send data\n\
+  -v\t     verbose, choose if there is progress bars\n\
+  -j\t     json format for recording, choose between json and csv (default is csv)\n\
+  -A/D\t     animation/dull, choose if there's spinning loading chars\n\
+  -h/?\t     show help\n\
+"); //* means should be, for debugging it is actually ens33
+
 }

@@ -80,7 +80,7 @@
         char LocalIpAddr[IPV4STR_MAX_LEN];
         int local_port;
         Rsock_packet* pTargetSet; 
-        int flag;       //DEF: 0-empty pointer || 1-wait for packet || 2-packet ready || 3-packet overwritten (warning!!)
+        int flag;       //general use to store temp variables of all sorts
         int sock;
         char* msg;
         int isWriting;

@@ -18,7 +18,7 @@
 int snippetsOfTcpReceiveManage(){
     //to avoid errors, i hate the color red
     Rsock_packet* recv_packet;
-    Packet_hint_pointers focusedAddrses[MAX_CONNECTIONS];
+    Packet_hint_pointers focusedAddrses[SERVER_MAX_CONNECTIONS];
     
     /* source ip variable in string */
     char srcIp[IPV4STR_MAX_LEN];
@@ -87,7 +87,7 @@ int snippetsOfTcpReceiveManage(){
         }
 }
 
-int tcp_request_multiThread(int socket, int dest_port, struct sockaddr_in serv_addr, char dest_ip[IPV4STR_MAX_LEN], char requestMsg[PAYLOAD_MAX_LEN], char* finalMsg, Packet_hint_pointers (* focusedAddrses)[MAX_CONNECTIONS]){
+int tcp_request_multiThread(int socket, int dest_port, struct sockaddr_in serv_addr, char dest_ip[IPV4STR_MAX_LEN], char requestMsg[PAYLOAD_MAX_LEN], char* finalMsg, Packet_hint_pointers (* focusedAddrses)[SERVER_MAX_CONNECTIONS]){
     progressBar_print("started tcp request", 1);
     char debugText[150];
     Rsock_packet recv_packet;
@@ -106,7 +106,7 @@ int tcp_request_multiThread(int socket, int dest_port, struct sockaddr_in serv_a
     }
     
     int i;
-    for(i=0; i < MAX_CONNECTIONS; i++){
+    for(i=0; i < SERVER_MAX_CONNECTIONS; i++){
         if(focusedAddrses[i]->flag == 0 || focusedAddrses[i]->flag == 404) {
             struct Packet_hint_pointers buffer = {
                 {*dest_ip},                         // remoteIpAddr
@@ -125,7 +125,7 @@ int tcp_request_multiThread(int socket, int dest_port, struct sockaddr_in serv_a
             progressBar_print(debugText, 13);
             break;
         }else{
-            if(i == MAX_CONNECTIONS) {
+            if(i == SERVER_MAX_CONNECTIONS) {
                 progressBar_print("connection full (%d), please close some connection or wait and try again", 100);
                 return -2;
             }
@@ -196,7 +196,7 @@ int tcp_request_multiThread(int socket, int dest_port, struct sockaddr_in serv_a
 
 
 void* serverThread(void* vargp){
-    // Packet_hint_pointers (*focusedAddrses)[MAX_CONNECTIONS] = ((ReceiveThread_args *)vargp)->focusedAddrses;
+    // Packet_hint_pointers (*focusedAddrses)[SERVER_MAX_CONNECTIONS] = ((ReceiveThread_args *)vargp)->focusedAddrses;
     Settings_struct* settings = ((ReceiveThread_args *)vargp)->settings;
 
     int socket = settings->receiveSocket;
