@@ -13,7 +13,7 @@ $ sudo iptables -A OUTPUT -p tcp --tcp-flags RST RST -j DROP
 
 ## Quick Start
 ```bash
-$ sudo ./bin/tcpLab -i \<network-interface\> -\<S / R\>
+$ sudo ./bin/tcpLab -i <network-interface> -<S / R>
 ```
 
 ### Set Network Interface
