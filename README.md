@@ -4,7 +4,7 @@ A `C` program that send and receives tcp packets from raw sockets. It can be use
 *"On a side note"*, this program only runs on **linux** and linux only, I'm sorry :(.
 <br/><br/><br/>
 
-## Before you start :hand:
+## Before you start :stop_sign:
 removing automatic reset packets is needed. To do that on ubuntu, just type this into the terminal.
 ```bash
 $ sudo iptables -A OUTPUT -p tcp --tcp-flags RST RST -j DROP
