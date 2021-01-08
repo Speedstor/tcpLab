@@ -16,14 +16,16 @@
 void* cycleSendThread(void* vargp);
 
 void printSettings(Settings_struct printSetting){
-    printf("\n--- Tcp Lab (send custom udp/mostly tcp socket) ------------------------------------------------------------------\n\
+    printf("\n--- Tcp Lab (send custom udp/mostly tcp socket) ----------------------------------------------------\n\
 \n\
-   Startup Params:  port: %d | send_mode: %d | receive_mode: %d | dest ip: %s | \n\
-                     net interface: %s | source ip: %s | source port: %d | protocol: %d\n\
+   Setting Params:  port: %d | send_mode: %d | receive_mode: %d | dest ip: %s\n\
+                     net interface: %s | source ip: %s | source port: %d\n\
+                     protocol: %d | multithread: %d | verbose: %d | clAnimation: %d\n\
+                     jsonFormat: %d | recordtoDB: %d | handledCount: %d\n\
                      message[%d]: %s\n\
 \n\
------------------------------------------------------------------------------------------------------------\n\n\n",
-    printSetting.port, printSetting.send_mode, printSetting.receive_mode, printSetting.dest_ip, printSetting.network_interface, printSetting.source_ip, printSetting.src_port, printSetting.protocol, (int)strlen(printSetting.message), printSetting.message);
+----------------------------------------------------------------------------------------------------\n\n\n",
+    printSetting.port, printSetting.send_mode, printSetting.receive_mode, printSetting.dest_ip, printSetting.network_interface, printSetting.source_ip, printSetting.src_port, printSetting.protocol, ifMultithread, verbose, animation, recordJson, recordDB, handledCount, (int)strlen(printSetting.message), printSetting.message);
 }
 
 void commandUsage(){
@@ -146,11 +148,12 @@ void* commandThread(void* vargp) {
                 printf("[periodic] A thread is already running and sending requests\n");
             }
         }else if (strcmp(command, "endPeriodic") == 0){
+            cycle_running = 0;
+            sleep(1);
             if(cycle_thread){
                 pthread_cancel(cycle_thread);
                 pthread_join(cycle_thread, NULL);
             }
-            cycle_running = 0;
             printf("[periodic:end] ending thread that send requests--\n");
         }else if (strcmp(command, "emptyDB") == 0){
             //for clean debugging database
@@ -168,10 +171,12 @@ void* commandThread(void* vargp) {
             FILE* dbFile;
             dbFile = fopen("tcpDB_sent.txt", "w");
             if(!dbFile) printf("unable to open buffer file:: error\n");
+            if(recordJson == 0) fprintf(dbFile, "tableName,ifAuto,seq,data,packet,time\n");
             fclose(dbFile);
 
             dbFile = fopen("tcpDB_receive.txt", "w");
             if(!dbFile) printf("unable to open buffer file:: error\n");
+            if(recordJson == 0) fprintf(dbFile, "tableName,ifAuto,seq,data,packet,time\n");
             fclose(dbFile);
             in_progress = -1;
             cycle_running = -1;
@@ -211,6 +216,30 @@ void* commandThread(void* vargp) {
                 else animation = 1;
             }else{
                 animation = 1;
+            }
+        }else if (strcmp(command, "verbose") == 0){
+            if(pParam != NULL){
+                if(strcmp(pParam + 1, "false") == 0 || strcmp(pParam + 1, "off") == 0 || strcmp(pParam + 1, "end") == 0 || strcmp(pParam + 1, "stop") == 0)
+                    verbose = 0;
+                else verbose = 1;
+            }else{
+                verbose = 1;
+            }
+        }else if (strcmp(command, "record") == 0 || strcmp(command, "recordDB") == 0){
+            if(pParam != NULL){
+                if(strcmp(pParam + 1, "false") == 0 || strcmp(pParam + 1, "off") == 0 || strcmp(pParam + 1, "end") == 0 || strcmp(pParam + 1, "stop") == 0)
+                    recordDB = 0;
+                else recordDB = 1;
+            }else{
+                recordDB = 1;
+            }
+        }else if (strcmp(command, "recordJson") == 0 || strcmp(command, "json") == 0){
+            if(pParam != NULL){
+                if(strcmp(pParam + 1, "false") == 0 || strcmp(pParam + 1, "off") == 0 || strcmp(pParam + 1, "end") == 0 || strcmp(pParam + 1, "stop") == 0)
+                    recordJson = 0;
+                else recordJson = 1;
+            }else{
+                recordJson = 1;
             }
         }else{
             printf("Invalid Command.\n");

@@ -50,7 +50,8 @@ int listenForPacket(Rsock_packet* recv_packet, int socket, int protocol, char de
                     char* timestamp = getTimestamp();
 
                     char jsonSubmit[99999];
-                    sprintf(jsonSubmit, "{\"tableName\": \"packet_receive\", \"ifAuto\": true, \"seq\": %u, \"data\": \"%s\", \"packet\": \"%s\", \"time\": \"%s\"}", ntohl(recv_packet->tcp->seq), payloadBinSeq, packetBinSeq, timestamp);
+                    if(recordJson) sprintf(jsonSubmit, "{\"tableName\": \"packet_receive\", \"ifAuto\": true, \"seq\": %u, \"data\": \"%s\", \"packet\": \"%s\", \"time\": \"%s\"}", ntohl(recv_packet->tcp->seq), payloadBinSeq, packetBinSeq, timestamp);
+                    else sprintf(jsonSubmit, "\"packet_receive\",true,%u,\"%s\",\"%s\",\"%s\"", ntohl(recv_packet->tcp->seq), payloadBinSeq, packetBinSeq, timestamp);
                     db_put((void *) jsonSubmit, 2);
 
                     free(packetBinSeq);
@@ -98,7 +99,8 @@ int listenForPacket_sync(Rsock_packet* recv_packet, int socket, int protocol, ch
                     char* timestamp = getTimestamp();
 
                     char jsonSubmit[99999];
-                    sprintf(jsonSubmit, "{\"tableName\": \"packet_receive\", \"ifAuto\": true, \"seq\": %u, \"data\": \"%s\", \"packet\": \"%s\", \"time\": \"%s\"}", ntohl(recv_packet->tcp->seq), payloadBinSeq, packetBinSeq, timestamp);
+                    if(recordJson) sprintf(jsonSubmit, "{\"tableName\": \"packet_receive\", \"ifAuto\": true, \"seq\": %u, \"data\": \"%s\", \"packet\": \"%s\", \"time\": \"%s\"}", ntohl(recv_packet->tcp->seq), payloadBinSeq, packetBinSeq, timestamp);
+                    else sprintf(jsonSubmit, "\"packet_receive\",true,%u,\"%s\",\"%s\",\"%s\"", ntohl(recv_packet->tcp->seq), payloadBinSeq, packetBinSeq, timestamp);
                     db_put((void *) jsonSubmit, 2);
 
                     free(packetBinSeq);

@@ -49,7 +49,7 @@ void* tcpHandleRequest_singleThread(void* vargp){
     char tcpOptions[50];
 
     uint32_t seq = rand() % 1000000000;
-    uint32_t ack_seq = ntohl(hints->pTargetSet->tcp->seq) + 1;
+    uint32_t ack_seq = hints->flag + 1;
 
     int send_socket = hints->sock;
 	int recv_socket = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
@@ -63,15 +63,19 @@ void* tcpHandleRequest_singleThread(void* vargp){
     sprintf(tcpOptions, "sa\t%d\t%d\t", seq, ack_seq);
     tcp_sendPacket(send_socket, hints->local_port, hints->remote_port, dest, source, "", tcpOptions);
 
-    // progressBar_print(30, "sent syn + ack packet\n\n");
+    progressBar_print(30, "sent syn + ack packet");
 
-    //last handshake packet: get psh ack and parse data (the upload request string)
+    //last handshake packet: get ack and parse data (the upload request string)
+    listenForPacket(&recv_packet, recv_socket, 6, (char *) &hints->LocalIpAddr, hints->local_port, (char *) &hints->RemoteIpAddr, hints->remote_port, seq+=1);
+    if(recv_packet.tcp->ack == 1) //normal behavior;
+    free(recv_packet.pBuffer);
+    
+    //push ack packet
     listenForPacket(&recv_packet, recv_socket, 6, (char *) &hints->LocalIpAddr, hints->local_port, (char *) &hints->RemoteIpAddr, hints->remote_port, seq);
-    //ack packet
     ack_seq = ntohl(recv_packet.tcp->seq) + recv_packet.payload_len;
     if(recv_packet.tcp->syn == 1) ack_seq++;
-    // sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
-    // tcp_sendPacket(send_socket, hints->local_port, hints->remote_port, dest, source, "", tcpOptions);
+    sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
+    tcp_sendPacket(send_socket, hints->local_port, hints->remote_port, dest, source, "", tcpOptions);
     
     if(recv_packet.tcp->rst == 1){
         progressBar_print(100, "received reset packet");
@@ -80,13 +84,14 @@ void* tcpHandleRequest_singleThread(void* vargp){
         progressBar_print(100, "unkown flag condition!!");
         return NULL;
     }
+    free(recv_packet.pBuffer);
     progressBar_print(40, "received request details--");
         
 
     //send data/response
     // seq = ntohl(recv_packet.tcp.ack_seq);
-    ack_seq = ntohl(recv_packet.tcp->seq) + 1; //add one for the syn flag
-    sprintf(tcpOptions, "a\t%d\t%d\t", seq, ack_seq);
+    // ack_seq = ntohl(recv_packet.tcp->seq) + 1; //add one for the syn flag
+    sprintf(tcpOptions, "pa\t%d\t%d\t", seq, ack_seq);
     tcp_sendPacket(send_socket, hints->local_port, hints->remote_port, dest, source, predefinedResponse, tcpOptions);
     //TODO: instead of predefinedResponse, send response according to request
 
@@ -94,13 +99,25 @@ void* tcpHandleRequest_singleThread(void* vargp){
 
     listenForPacket(&recv_packet, recv_socket, 6, (char *) &hints->LocalIpAddr, hints->local_port, (char *) &hints->RemoteIpAddr, hints->remote_port,  seq+=strlen(predefinedResponse));
     if(recv_packet.tcp->ack == 1) //normal behavior;
-    
+    free(recv_packet.pBuffer);
+
     progressBar_print(70, "finished data exchange, going to end tcp stream");
 
     //fin, psh, ack
     sprintf(tcpOptions, "fpa\t%d\t%d\t", seq, ack_seq);
     tcp_sendPacket(send_socket, hints->local_port, hints->remote_port, dest, source, "", tcpOptions);
+    seq+=1;
+
+    //listen for last fin, ack
+    listenForPacket(&recv_packet, recv_socket, 6, (char *) &hints->LocalIpAddr, hints->local_port, (char *) &hints->RemoteIpAddr, hints->remote_port, seq);
+    if(recv_packet.tcp->ack == 1 && recv_packet.tcp->fin == 1) //normal behavior;
+    if(recv_packet.tcp->fin == 1) ack_seq++;
+    free(recv_packet.pBuffer);
+
+    sprintf(tcpOptions, "a\t%d\t%d\t", seq, ack_seq);
+    tcp_sendPacket(send_socket, hints->local_port, hints->remote_port, dest, source, "", tcpOptions);
     
+
     progressBar_print(100, "[%d] Finished, sent data: %s", handledCount, hints->RemoteIpAddr);
     if(verbose){
         printf("\n");
@@ -154,12 +171,14 @@ int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int
     /**
      * Receive syn&ack Packet  ------
      */
-    listenForPacket(&recv_packet, recv_socket, 6, src_ip, src_port,dest_ip, dest_port,  seq);
+    listenForPacket(&recv_packet, recv_socket, 6, src_ip, src_port,dest_ip, dest_port,  seq+=1);
+    printf("\noriginal seq: %u  ", ntohl(recv_packet.tcp->seq));
     ack_seq = ntohl(recv_packet.tcp->seq) + recv_packet.payload_len;
     if(recv_packet.tcp->syn == 1) ack_seq++;
+    printf("new seq: %u  \n", ack_seq);
     // //send acknowledge first
-    // sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
-    // tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
+    sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
+    tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
 
     if(recv_packet.tcp->rst == 1){
         progressBar_print(100, "tcp received reset flag, stopped process");
@@ -168,6 +187,7 @@ int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int
         progressBar_print(100, "unkown flag condition!!");
         return -1;
     }
+    free(recv_packet.pBuffer);
 
     progressBar_print(30, "received, fin 3-way handshake");
     //END: finish handshake w/ vv --------------------------------------------------------------------------------------------
@@ -183,15 +203,16 @@ int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int
 
     progressBar_print(39, "sent request string");
 
+
     // /**
     //  * Receive ack Packet  ------
     //  */
-    // listenForPacket(&recv_packet, recv_socket, 6, src_ip, src_port, dest_ip, dest_port, seq+=strlen(requestMsg));
-    // if(recv_packet.tcp->ack == 1) //normal behavior; TODO: else and handle exception
+    listenForPacket(&recv_packet, recv_socket, 6, src_ip, src_port, dest_ip, dest_port, seq+=strlen(requestMsg));
+    if(recv_packet.tcp->ack == 1) //normal behavior; TODO: else and handle exception
     
 
     /**
-     * Receive data with ack Packet  ------
+     * Receive data with ack Packet  ------ pa
      */
     listenForPacket(&recv_packet, recv_socket, 6,  src_ip, src_port,dest_ip, dest_port, seq);
     if(recv_packet.tcp->ack == 1) //normal behavior; TODO: else and handle exception
@@ -204,6 +225,7 @@ int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int
     strncpy(finalMsg, (char *) recv_packet.payload, recv_packet.payload_len);
 
     progressBar_print(39, "received ack packet with the data");
+    free(recv_packet.pBuffer);
     // progressBar_print(61, "received message from server");
 
     /**
@@ -211,14 +233,20 @@ int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int
      */
     listenForPacket(&recv_packet, recv_socket, 6, src_ip, src_port, dest_ip, dest_port, seq);
     if(recv_packet.tcp->fin == 1){
-        sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
+        ack_seq++;
+        free(recv_packet.pBuffer);
+        sprintf(tcpOptions, "fa\t%u\t%u\t", seq, ack_seq);
         tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
 
-        sprintf(tcpOptions, "f\t%u\t%u\t", seq, ack_seq);
-        tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
+        listenForPacket(&recv_packet, recv_socket, 6, src_ip, src_port, dest_ip, dest_port, seq);
+        if(recv_packet.tcp->ack == 1) //normal behavior; TODO: else and handle exception
+        free(recv_packet.pBuffer);
     }else{
         //TODO: keep adding to the finalMsg or react to the flags
+        free(recv_packet.pBuffer);
     }
+
+
 
     progressBar_print(100, "[%d] Finished:: received message from server", handledCount);
     if(verbose){
@@ -276,6 +304,13 @@ int tcp_request_wTimeout(int timeoutSec, int send_socket, char dest_ip[IPV4STR_M
     if (ifTimeout == ETIMEDOUT){
         if(verbose)     progressBar_print(100, "(-1) TIMEOUT: tcp request timeout (%ds): %s\n", timeoutSec, dest_ip);
         else            printf("tcp request timeout   || \n");
+
+
+        if(recordDB){
+            db_put((void *) "---,---,---,---,---,---", 1);
+            db_put((void *) "---,---,---,---,---,---", 2);
+        }
+        
         success = -1;
     }
 
@@ -325,10 +360,16 @@ void* tcpHandleRequest_wTimeout(void* vargp){
             printf("  tcp response timeout   || ");
             fflush(stdout);
         }
+
+        if(recordDB){
+            db_put((void *) "---,---,---,---,---,---", 1);
+            db_put((void *) "---,---,---,---,---,---", 2);
+        }
     }
 
     pthread_mutex_unlock(&inProcess);
     pthread_join(thread_id, NULL);
+    *((volatile int*)((Packet_hint_pointers*) vargp)->expansion_ptr) = 2;
     return NULL;
 }
 
@@ -336,7 +377,6 @@ void* tcpHandleRequest_wTimeout(void* vargp){
 int tcp_sendPacket(int sock, int src_port, int dst_port, struct addrinfo *dest, struct addrinfo *source, char message[PAYLOAD_MAX_LEN], char* pOptions){
     //construct header
     int protocol = 6;
-    char jsonSubmit[99999];
 
     int headersize;
     int packetsize;
@@ -427,19 +467,21 @@ int tcp_sendPacket(int sock, int src_port, int dst_port, struct addrinfo *dest, 
         return -1;
     }
 
-    //record to database
-    char* packetBinSeq = toBinaryString((void *) &tBufferPacket, packetsize);
-    char* dataBinSeq = toBinaryString((void *) message, strlen(message));
-    char* timestamp = getTimestamp();
-
     if(recordDB){
-        sprintf(jsonSubmit, "{\"tableName\": \"packet_sent\", \"seq\": %u, \"data\": \"%s\", \"packet\": \"%s\", \"time\": \"%s\"}", seq, dataBinSeq, packetBinSeq, timestamp);
+        char jsonSubmit[99999];
+        //record to database
+        char* packetBinSeq = toBinaryString((void *) &tBufferPacket, packetsize);
+        char* dataBinSeq = toBinaryString((void *) message, strlen(message));
+        char* timestamp = getTimestamp();
+                    
+        if(recordJson) sprintf(jsonSubmit, "{\"tableName\": \"packet_sent\", \"ifAuto\": true, \"seq\": %u, \"data\": \"%s\", \"packet\": \"%s\", \"time\": \"%s\"}", seq, dataBinSeq, packetBinSeq, timestamp);
+        else sprintf(jsonSubmit, "\"packet_sent\",true,%u,\"%s\",\"%s\",\"%s\"", seq, dataBinSeq, packetBinSeq, timestamp);
         db_put((void *) jsonSubmit, 1);
-    }
 
-    free(packetBinSeq);
-    free(dataBinSeq);
-    free(timestamp);
+        free(packetBinSeq);
+        free(dataBinSeq);
+        free(timestamp);
+    }
 
     return packetsize;
 }

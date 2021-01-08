@@ -13,7 +13,7 @@
     #define NETWORK_INTERFACE_MAX_LEN 16
     #define PAYLOAD_MAX_LEN 1400
     #define MESSAGE_MAX_LEN 65536
-    #define MAX_CONNECTIONS 40
+    #define SERVER_MAX_CONNECTIONS 45
 #endif
 
 
@@ -84,13 +84,14 @@
         int sock;
         char* msg;
         int isWriting;
+        void* expansion_ptr;
     }Packet_hint_pointers;
 #endif
 
 #ifndef RECEIVE_THREAD_ARGS
 #define RECEIVE_THREAD_ARGS
     typedef struct ReceiveThread_args{
-        Packet_hint_pointers (*focusedAddrses) [MAX_CONNECTIONS];
+        Packet_hint_pointers (*focusedAddrses) [SERVER_MAX_CONNECTIONS];
         Settings_struct* settings;
     }ReceiveThread_args;
 #endif

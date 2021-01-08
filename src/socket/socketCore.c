@@ -147,7 +147,7 @@ int receivePacket(Rsock_packet* rPacket, int sock_r){
 
 //for "multithread", combine all the listenForPacket() into one socket
 void* receiveThread(void* vargp){
-    Packet_hint_pointers (*focusedAddrses)[MAX_CONNECTIONS] = ((ReceiveThread_args *)vargp)->focusedAddrses;
+    Packet_hint_pointers (*focusedAddrses)[SERVER_MAX_CONNECTIONS] = ((ReceiveThread_args *)vargp)->focusedAddrses;
     Settings_struct* settings = ((ReceiveThread_args *)vargp)->settings;
 
     int socket = settings->receiveSocket;
@@ -160,7 +160,7 @@ void* receiveThread(void* vargp){
         if(rSuccess < 0) continue; //bad packet and error in receiving
 
         if(receive.protocol != 6 && receive.protocol != 206) continue; //only tcp packets are supported for now
-        for(int i=0; i < MAX_CONNECTIONS; i++){
+        for(int i=0; i < SERVER_MAX_CONNECTIONS; i++){
             if((*focusedAddrses)[i].flag != 0 && (*focusedAddrses)[i].flag != 404){
                 if(strcmp((*focusedAddrses)[i].RemoteIpAddr, inet_ntoa(receive.source.sin_addr)) == 0
                   && htons(receive.tcp->dest) == (*focusedAddrses)[i].local_port

@@ -10,6 +10,7 @@
     int ifMultithread;
     int verbose;
     int animation;
+    int recordJson;
 
     struct addrinfo addr_settings; //global so that it need to only set once
 

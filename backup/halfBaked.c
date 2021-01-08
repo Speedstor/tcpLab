@@ -176,7 +176,7 @@ int tcp_request_multiThread(int socket, int dest_port, struct sockaddr_in serv_a
     send_packet(socket, protocol, ntohs(serv_addr.sin_port), port, dest_ip, message, tcpOptions);
 
     /** 
-     * Recieve Packet  ------
+     * Receive Packet  ------
      */
     progressBar_print("waiting for whole data and fin bit...", 70);
 

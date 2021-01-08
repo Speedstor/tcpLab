@@ -17,12 +17,13 @@ int main(int argc, char **argv) {
     recordDB = 0;
     ifMultithread = 0;
     verbose = 0;
+    recordJson = 0;
     animation = 1;
 
     handledCount = 0;
 
     //a store of addresses to keep track of what is of interest and in store
-    Packet_hint_pointers focusedAddrses[MAX_CONNECTIONS];                       
+    Packet_hint_pointers focusedAddrses[SERVER_MAX_CONNECTIONS];                       
     memset(&focusedAddrses, 0, sizeof(focusedAddrses));
 
     //setup default variables
@@ -45,7 +46,7 @@ int main(int argc, char **argv) {
     //receive args -------------
     char c;
     while (1) {
-        c = getopt_long(argc, argv, "DvMhrSRBP:s:d:p:i:m:", NULL, NULL);
+        c = getopt_long(argc, argv, "DjvMhrSRBP:s:d:p:i:m:", NULL, NULL);
         if (c == -1) break;
 
         switch (c) {
@@ -100,7 +101,10 @@ int main(int argc, char **argv) {
             ifMultithread = 1;
             break;
         case 'D':
-            animation = -1;
+            animation = 0;
+            break;
+        case 'j':
+            recordJson = 1;
             break;
         case '?': //help
         case 'h':
@@ -140,14 +144,14 @@ int main(int argc, char **argv) {
     pthread_create(&commandThread_id, NULL, commandThread, &settings);
 
     ReceiveThread_args rArgs = { &focusedAddrses, &settings };
+    pthread_t receiveThread_id;
+    pthread_t serverThread_id;
     if(ifMultithread){
         //setup receive thread 
-        pthread_t receiveThread_id;
         pthread_create(&receiveThread_id, NULL, receiveThread, &rArgs);
     }
 
     if(settings.receive_mode){
-        pthread_t serverThread_id;
         pthread_create(&serverThread_id, NULL, serverThread, &rArgs);
     }
 
@@ -167,6 +171,9 @@ int main(int argc, char **argv) {
         }
         sleep(1);
     }
+    pthread_join(commandThread_id, NULL);
+    if(receiveThread_id) pthread_join(receiveThread_id, NULL);
+    if(serverThread_id) pthread_join(serverThread_id, NULL);
 
     //for debugging re-do make
     // printf("modified");
@@ -175,7 +182,7 @@ int main(int argc, char **argv) {
 void usage(){
     printf("---- Tcp/ip Tester --------------------------[help]--\n\
   -r\t     record packets to database\n\
-  -M\t     multithread in sending and receiving (have performance gain) [not implemented in send mode yet]\n\
+  -M\t     multithread in unifed receive (have performance gain) [not implemented]\n\
   -u\t     url to send recorded packets to\n\
   -S/R\t     select send or receive mode (default: -s)\n\
   -B\t     both send and receive mode\n\
