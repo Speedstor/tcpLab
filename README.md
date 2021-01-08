@@ -20,11 +20,9 @@ $ sudo ./bin/tcpLab -i \<network-interface\> -\<S / R\>
 The default network interface (*if*) is `wlp1s0`. And if your network interface is different, you have to specify it yourself. To check your *if*, you can do `ifconfig`. And if you don't know which one it is, you can do `iwconfig` instead, but you would need **net-tools**.
 ```bash
 $ ifconfig
-```
 
 ~or~
 
-```bash
 $ iwconfig
 ```
 
