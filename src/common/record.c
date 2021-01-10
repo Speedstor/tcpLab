@@ -6,16 +6,16 @@
 #include <errno.h>
 
 
+FILE* dbFile_sent = NULL;
+FILE* dbFile_receive = NULL;
 void db_put(void* jsonPayloadP, int option){
-    FILE* dbFile;
-    if(option == 1) dbFile = fopen("tcpDB_sent.txt", "a");
-    else            dbFile = fopen("tcpDB_receive.txt", "a");
-
-    if(!dbFile) {
-        printf("unable to open buffer file:: error");
+    if(option == 1){
+        if(dbFile_sent == NULL) dbFile_sent = fopen("tcpDB_sent.txt", "a");
+        fprintf(dbFile_sent, "%s\n", (char *) jsonPayloadP);
     }else{
-        fprintf(dbFile, "%s\n", (char *) jsonPayloadP);
+        if(dbFile_receive == NULL) dbFile_receive = fopen("tcpDB_receive.txt", "a");
+        fprintf(dbFile_receive, "%s\n", (char *) jsonPayloadP);
     }
 
-    fclose(dbFile);
+    // fclose(dbFile);
 }

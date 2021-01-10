@@ -1,9 +1,11 @@
 #include "./main.h"
+#include<sys/ioctl.h>
 
 //global variables
 #include "../global/global.h"
 
 void usage();
+void setupGlobalEth(int sock_raw);
 
 int main(int argc, char **argv) {
     //setting variables -------------
@@ -19,6 +21,12 @@ int main(int argc, char **argv) {
     verbose = 0;
     recordJson = 0;
     animation = 1;
+    checksumType = 1;
+    /* checksumType
+            1 -> normal tcp checksum
+            2 -> crc
+            3 -> none
+        */
 
     handledCount = 0;
 
@@ -37,7 +45,7 @@ int main(int argc, char **argv) {
         "",                                     //source_ip[IPV4STR_MAX_LEN] ("" means retrieve auto)
         // "wlp1s0",                               //network_interface[NETWORK_INTERFACE_MAX_LEN] (ubuntu 18.04)
         "wlp0s20f3",                            //network_interface (changed to default for debugging || wlp1s0 is the default in ubuntu 18.04)
-        "Speedstor -- default text message",    //message[PAYLOAD_MAX_LEN];
+        "velit scelerisque in dictum non consectetur a erat nam at lectus urna duis convallis convallis tellus id interdum velit laoreet id donec ultrices tincidunt arcu non sodales neque sodales ut etiam sit amet nisl purus in mollis nunc sed id semper risus in hendrerit gravida rutrum quisque non tellus orci ac auctor augue mauris augue neque gravida in fermentum et sollicitudin ac orci phasellus egestas tellus rutrum tellus pellentesque eu tincidunt tortor aliquam nulla facilisi cras fermentum odio eu feugiat pretium nibh ipsum consequat nisl vel pretium lectus quam id leo in vitae turpis massa sed elementum tempus egestas sed sed risus pretium quam vulputate dignissim suspendisse in est ante in nibh mauris cursus mattis molestie a iaculis at erat pellentesque adipiscing commodo elit at imperdiet dui accumsan sit amet nulla facilisi morbi tempus iaculis urna id volutpat lacus laoreet",    //message[PAYLOAD_MAX_LEN];
         -1
     };
 
@@ -46,7 +54,7 @@ int main(int argc, char **argv) {
     //receive args -------------
     char c;
     while (1) {
-        c = getopt_long(argc, argv, "ADjvMhrSRBP:s:d:p:i:m:", NULL, NULL);
+        c = getopt_long(argc, argv, "ADjvMhrSRBP:s:d:p:i:m:c:", NULL, NULL);
         if (c == -1) break;
 
         switch (c) {
@@ -93,6 +101,11 @@ int main(int argc, char **argv) {
                 return -1;
             }
             break;
+        case 'c': //checksumType
+            checksumType = strtol(optarg, NULL, 10);
+            if(checksumType <= 0) checksumType = 1;
+            if(checksumType >= 3) checksumType = 2;
+            break;
         case 'v':
             verbose = 1;
             break;
@@ -119,6 +132,8 @@ int main(int argc, char **argv) {
         }
     }
 
+    settings.protocol = getProtocol(checksumType);
+
     //retrieve and setup sourceip into variable
     if(strcmp(settings.source_ip, "") == 0){
         char* pSourceIp = getLocalIp_s(settings.network_interface);
@@ -135,7 +150,11 @@ int main(int argc, char **argv) {
     //SECTION: start of program
     running = 1;
     //setup socket
-    settings.sendSocket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    if(checksumType == 1) settings.sendSocket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+    else if(checksumType == 2) {
+        settings.sendSocket = socket(AF_PACKET,SOCK_RAW,IPPROTO_RAW);
+        setupGlobalEth(settings.sendSocket);
+    }
 	settings.receiveSocket = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if (settings.sendSocket < 0 || settings.receiveSocket < 0) {
         printf("socket opening error:: !might need root privileges\n");
@@ -190,6 +209,7 @@ void usage(){
   -P\t     destination port number (default: 8900)\n\
   -S/R/B\t     select send or receive mode, B is for both (default: -s)\n\
   -r\t     if record packets to database\n\
+  -c\t     checksum type (1: tcp, 2: crc), automatically changes protocol: (tcp: 6, crc: 206)\n\
   -M\t     multithread: unifed receive (have performance gain) [not implemented]\n\
   -m\t     message, payload of the data that going to be sent\n\
   -p\t     transport network protocol to send data\n\
@@ -198,5 +218,26 @@ void usage(){
   -A/D\t     animation/dull, choose if there's spinning loading chars\n\
   -h/?\t     show help\n\
 "); //* means should be, for debugging it is actually ens33
+
+}
+
+void setupGlobalEth(int sock_raw){
+    
+	memset(&ifreq_i,0,sizeof(ifreq_i));
+	strncpy(ifreq_i.ifr_name,"wlp0s20f3",IFNAMSIZ-1);
+
+	if((ioctl(sock_raw,SIOCGIFINDEX,&ifreq_i))<0)
+		printf("error in index ioctl reading");
+
+        
+	memset(&ifreq_c,0,sizeof(ifreq_c));
+	strncpy(ifreq_c.ifr_name,"wlp0s20f3",IFNAMSIZ-1);
+
+	if((ioctl(sock_raw,SIOCGIFHWADDR,&ifreq_c))<0)
+		printf("error in SIOCGIFHWADDR ioctl reading");
+
+	printf("Mac= %.2X-%.2X-%.2X-%.2X-%.2X-%.2X\n",(unsigned char)(ifreq_c.ifr_hwaddr.sa_data[0]),(unsigned char)(ifreq_c.ifr_hwaddr.sa_data[1]),(unsigned char)(ifreq_c.ifr_hwaddr.sa_data[2]),(unsigned char)(ifreq_c.ifr_hwaddr.sa_data[3]),(unsigned char)(ifreq_c.ifr_hwaddr.sa_data[4]),(unsigned char)(ifreq_c.ifr_hwaddr.sa_data[5]));
+
+    
 
 }

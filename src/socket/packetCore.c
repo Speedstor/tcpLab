@@ -87,10 +87,10 @@ int listenForPacket_sync(Rsock_packet* recv_packet, int socket, int protocol, ch
                     && recv_packet->tcp->syn == 1) {
 
                 //might be better to be in the upperFunction
-                if(validate_tcp_checksum(recv_packet->ip, (unsigned short *) &recv_packet->tcp) != 0){
+                // if(validate_tcp_checksum(recv_packet->ip, (unsigned short *) &recv_packet->tcp) != 0){
                     // printf("ERROR: !!received tcp packet checksum invalid\n");  //TODO!!!::: 
                     // return -1;
-                }
+                // }
 
                 if(recordDB){
                     //find index and update database

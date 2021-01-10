@@ -60,23 +60,34 @@ int clientRequest(int socket, int protocol, char source_ip[IPV4STR_MAX_LEN], cha
     char finalMsg[MESSAGE_MAX_LEN];
     memset(&finalMsg, '\0', MESSAGE_MAX_LEN);
 
+
     //check if port open, or get available free port if port is 0
-    int ifavl = -1;
-    while(ifavl < 0){
+    if(checksumType == 1){
+
+        int ifavl = -1;
+        while(ifavl < 0){
+            bzero((char *) &serv_addr, sizeof(serv_addr));
+            serv_addr.sin_family = AF_INET;
+            serv_addr.sin_port = htons(49152 + (rand() % 16300));
+            inet_aton(source_ip, &serv_addr.sin_addr);
+
+            if(bind(socket, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) >= 0)  ifavl = 1;
+        }
+    }else{
         bzero((char *) &serv_addr, sizeof(serv_addr));
         serv_addr.sin_family = AF_INET;
         serv_addr.sin_port = htons(49152 + (rand() % 16300));
         inet_aton(source_ip, &serv_addr.sin_addr);
 
-        if(bind(socket, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) >= 0)  ifavl = 1;
     }
 
     switch(protocol){
         case 6:                                        //standard tcp
+        case 206:                                      //custom tcp
+        case 216:                                      //custom tcp
 // int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int dest_port, char src_ip[IPV4STR_MAX_LEN], int src_port, char requestMsg[PAYLOAD_MAX_LEN], char* finalMsg){
             tcp_request_wTimeout(3, socket, dest_ip, dest_port, source_ip, ntohs(serv_addr.sin_port), requestMsg, (char *) &finalMsg);
             break;
-        case 206:                                      //custom tcp
             break;
         case 7:                                        //standard udp
             break;
@@ -115,6 +126,8 @@ int receivePacket(Rsock_packet* rPacket, int sock_r){
 	//extract transport layer header                            TRANSPORT
 	int iphdrlen = rPacket->ip->ihl * 4;// getting size of IP header from header (more accurate/foolproof)
 	switch(rPacket->protocol){
+		case 216:
+		case 206:
 		case 6:
 			//tcp
 			rPacket->tcp = (struct tcphdr*)( rPacket->pBuffer + iphdrlen + sizeof(struct ethhdr));
@@ -152,7 +165,7 @@ void* receiveThread(void* vargp){
 
     int socket = settings->receiveSocket;
 
-	while(1){
+	while(running){
         Rsock_packet receive;
     	memset(&receive, 0, sizeof(Rsock_packet));
 

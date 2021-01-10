@@ -30,6 +30,11 @@
         struct tcphdr tcp;
         char payload[PAYLOAD_MAX_LEN];
     } __attribute__((packed));
+
+    struct eth_packet {
+        struct ethhdr eth;
+        struct tcp_packet iptcp;
+    }__attribute__((packed));
 #endif
 
 
@@ -94,4 +99,9 @@
         Packet_hint_pointers (*focusedAddrses) [SERVER_MAX_CONNECTIONS];
         Settings_struct* settings;
     }ReceiveThread_args;
+#endif
+
+#ifndef DEFINITIONS_GETTER_HEADER
+#define DEFINITIONS_GETTER_HEADER
+    int getProtocol(int checksum);
 #endif

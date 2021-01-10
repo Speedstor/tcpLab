@@ -14,6 +14,19 @@
 #include <netdb.h>
 #include <sys/socket.h>
 
+
+#include<sys/socket.h>
+#include<sys/types.h>
+#include<sys/ioctl.h>
+
+#include<net/if.h>
+#include<netinet/in.h>
+#include<netinet/ip.h>
+#include<netinet/if_ether.h>
+#include<netinet/udp.h>
+
+#include<linux/if_packet.h>
+
 #include "../../common/definitions.h"
 #include "../../common/record.h"
 #include "../../global/global.h"
@@ -23,10 +36,12 @@
 unsigned short validate_tcp_checksum(struct iphdr *pIph, unsigned short *ipPayload);
 unsigned short compute_tcp_checksum_withFullPacket(void* fullPacket);
 unsigned short compute_tcp_checksum(struct iphdr *pIph, unsigned short *ipPayload);
-unsigned short compute_tcpcrc_checksum(struct iphdr *pIph, unsigned short *ipPayload);
+unsigned short csum(void *packetPtr,int nbytes) ;
+unsigned short compute_tcpcrc_checksum(void* fullPacket);
 int tcp_sendPacket(int sock, int src_port, int dst_port, struct addrinfo *dest, struct addrinfo *source, char message[PAYLOAD_MAX_LEN], char* pOptions);
 
 void* tcpHandleRequest_singleThread(void* vargp){
+    int protocol = getProtocol(checksumType);
     //receive sync
     Packet_hint_pointers* hints;
     hints = vargp;
@@ -66,12 +81,12 @@ void* tcpHandleRequest_singleThread(void* vargp){
     progressBar_print(30, "sent syn + ack packet");
 
     //last handshake packet: get ack and parse data (the upload request string)
-    listenForPacket(&recv_packet, recv_socket, 6, (char *) &hints->LocalIpAddr, hints->local_port, (char *) &hints->RemoteIpAddr, hints->remote_port, seq+=1);
+    listenForPacket(&recv_packet, recv_socket, protocol, (char *) &hints->LocalIpAddr, hints->local_port, (char *) &hints->RemoteIpAddr, hints->remote_port, seq+=1);
     if(recv_packet.tcp->ack == 1) //normal behavior;
     free(recv_packet.pBuffer);
-    
+
     //push ack packet
-    listenForPacket(&recv_packet, recv_socket, 6, (char *) &hints->LocalIpAddr, hints->local_port, (char *) &hints->RemoteIpAddr, hints->remote_port, seq);
+    listenForPacket(&recv_packet, recv_socket, protocol, (char *) &hints->LocalIpAddr, hints->local_port, (char *) &hints->RemoteIpAddr, hints->remote_port, seq);
     ack_seq = ntohl(recv_packet.tcp->seq) + recv_packet.payload_len;
     if(recv_packet.tcp->syn == 1) ack_seq++;
     sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
@@ -97,7 +112,7 @@ void* tcpHandleRequest_singleThread(void* vargp){
 
     progressBar_print(50, "sent response to client");
 
-    listenForPacket(&recv_packet, recv_socket, 6, (char *) &hints->LocalIpAddr, hints->local_port, (char *) &hints->RemoteIpAddr, hints->remote_port,  seq+=strlen(predefinedResponse));
+    listenForPacket(&recv_packet, recv_socket, protocol, (char *) &hints->LocalIpAddr, hints->local_port, (char *) &hints->RemoteIpAddr, hints->remote_port,  seq+=strlen(predefinedResponse));
     if(recv_packet.tcp->ack == 1) //normal behavior;
     free(recv_packet.pBuffer);
 
@@ -109,7 +124,7 @@ void* tcpHandleRequest_singleThread(void* vargp){
     seq+=1;
 
     //listen for last fin, ack
-    listenForPacket(&recv_packet, recv_socket, 6, (char *) &hints->LocalIpAddr, hints->local_port, (char *) &hints->RemoteIpAddr, hints->remote_port, seq);
+    listenForPacket(&recv_packet, recv_socket, protocol, (char *) &hints->LocalIpAddr, hints->local_port, (char *) &hints->RemoteIpAddr, hints->remote_port, seq);
     if(recv_packet.tcp->ack == 1 && recv_packet.tcp->fin == 1) //normal behavior;
     if(recv_packet.tcp->fin == 1) ack_seq++;
     free(recv_packet.pBuffer);
@@ -127,10 +142,12 @@ void* tcpHandleRequest_singleThread(void* vargp){
         }
     }
 
+    close(recv_socket);
     return NULL;
 }
 
 int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int dest_port, char src_ip[IPV4STR_MAX_LEN], int src_port, char* requestMsg, char* finalMsg){
+    int protocol = getProtocol(checksumType);
     progressBar_print(1, "started tcp request");
     Rsock_packet recv_packet;
 
@@ -160,25 +177,14 @@ int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int
     tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
 
     progressBar_print(25, "waiting response...");
-    
-
-    // /**
-    //  * Receive ack Packet  ------
-    //  */
-    // listenForPacket(&recv_packet, recv_socket, 6, dest_ip, dest_port, src_ip, src_port, seq+=1);
-    // if(recv_packet.tcp.ack != 1) //normal behavior; TODO: else and handle exception
 
     /**
      * Receive syn&ack Packet  ------
      */
-    listenForPacket(&recv_packet, recv_socket, 6, src_ip, src_port,dest_ip, dest_port,  seq+=1);
-    printf("\noriginal seq: %u  ", ntohl(recv_packet.tcp->seq));
+    listenForPacket(&recv_packet, recv_socket, protocol, src_ip, src_port,dest_ip, dest_port,  seq+=1);
     ack_seq = ntohl(recv_packet.tcp->seq) + recv_packet.payload_len;
     if(recv_packet.tcp->syn == 1) ack_seq++;
-    printf("new seq: %u  \n", ack_seq);
     // //send acknowledge first
-    sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
-    tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
 
     if(recv_packet.tcp->rst == 1){
         progressBar_print(100, "tcp received reset flag, stopped process");
@@ -188,6 +194,9 @@ int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int
         return -1;
     }
     free(recv_packet.pBuffer);
+
+    sprintf(tcpOptions, "a\t%u\t%u\t", seq, ack_seq);
+    tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
 
     progressBar_print(30, "received, fin 3-way handshake");
     //END: finish handshake w/ vv --------------------------------------------------------------------------------------------
@@ -207,14 +216,14 @@ int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int
     // /**
     //  * Receive ack Packet  ------
     //  */
-    listenForPacket(&recv_packet, recv_socket, 6, src_ip, src_port, dest_ip, dest_port, seq+=strlen(requestMsg));
+    listenForPacket(&recv_packet, recv_socket, protocol, src_ip, src_port, dest_ip, dest_port, seq+=strlen(requestMsg));
     if(recv_packet.tcp->ack == 1) //normal behavior; TODO: else and handle exception
     
 
     /**
      * Receive data with ack Packet  ------ pa
      */
-    listenForPacket(&recv_packet, recv_socket, 6,  src_ip, src_port,dest_ip, dest_port, seq);
+    listenForPacket(&recv_packet, recv_socket, protocol,  src_ip, src_port,dest_ip, dest_port, seq);
     if(recv_packet.tcp->ack == 1) //normal behavior; TODO: else and handle exception
     //send acknowledge first
     ack_seq = ntohl(recv_packet.tcp->seq) + recv_packet.payload_len; //
@@ -231,14 +240,14 @@ int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int
     /**
      * Receive remaining Packets  ------
      */
-    listenForPacket(&recv_packet, recv_socket, 6, src_ip, src_port, dest_ip, dest_port, seq);
+    listenForPacket(&recv_packet, recv_socket, protocol, src_ip, src_port, dest_ip, dest_port, seq);
     if(recv_packet.tcp->fin == 1){
         ack_seq++;
         free(recv_packet.pBuffer);
         sprintf(tcpOptions, "fa\t%u\t%u\t", seq, ack_seq);
         tcp_sendPacket(send_socket, src_port, dest_port, dest, source, "", tcpOptions);
 
-        listenForPacket(&recv_packet, recv_socket, 6, src_ip, src_port, dest_ip, dest_port, seq);
+        listenForPacket(&recv_packet, recv_socket, protocol, src_ip, src_port, dest_ip, dest_port, seq);
         if(recv_packet.tcp->ack == 1) //normal behavior; TODO: else and handle exception
         free(recv_packet.pBuffer);
     }else{
@@ -253,6 +262,7 @@ int tcp_request_singleThread(int send_socket, char dest_ip[IPV4STR_MAX_LEN], int
         printf("\n");
     }
 
+    close(recv_socket);
     // end_progressBar(0);
     return 1;
 }
@@ -373,20 +383,12 @@ void* tcpHandleRequest_wTimeout(void* vargp){
     return NULL;
 }
 
-//if success return packet length
-int tcp_sendPacket(int sock, int src_port, int dst_port, struct addrinfo *dest, struct addrinfo *source, char message[PAYLOAD_MAX_LEN], char* pOptions){
-    //construct header
-    int protocol = 6;
-
+int constructTcpHeader(struct tcp_packet* tBufferPacket, int protocol, int src_port, int dst_port, struct addrinfo *dest, struct addrinfo *source, char message[PAYLOAD_MAX_LEN], char* pOptions){
     int headersize;
     int packetsize;
     int tcpHeaderLen;
     uint32_t seq;
     uint32_t seq_ack;
-
-    struct tcp_packet tBufferPacket;
-
-    int success;
 
     //parse options from string because of the how long the parameter is
     int optionLen;
@@ -400,36 +402,43 @@ int tcp_sendPacket(int sock, int src_port, int dst_port, struct addrinfo *dest, 
     if (pParam != NULL) memset(pParam, '\0', 1);
 
     tcpHeaderLen = 20;
-    headersize = sizeof(tBufferPacket.ip) + tcpHeaderLen;
+    headersize = sizeof(tBufferPacket->ip) + tcpHeaderLen;
     packetsize = headersize + strlen(message);
 
-    tBufferPacket.ip.ip_v = 4;
-    tBufferPacket.ip.ip_hl = sizeof(tBufferPacket.ip) >> 2;
-    tBufferPacket.ip.ip_dst = ((struct sockaddr_in *) dest->ai_addr)->sin_addr;
-    tBufferPacket.ip.ip_src = ((struct sockaddr_in *) source->ai_addr)->sin_addr;
-    tBufferPacket.ip.ip_p = protocol;
-    tBufferPacket.ip.ip_ttl = 23;
-    tBufferPacket.ip.ip_len = htons(packetsize);
+    tBufferPacket->ip.ip_v = 4;
+    tBufferPacket->ip.ip_hl = sizeof(tBufferPacket->ip) >> 2;
+    tBufferPacket->ip.ip_dst = ((struct sockaddr_in *) dest->ai_addr)->sin_addr;
+    tBufferPacket->ip.ip_src = ((struct sockaddr_in *) source->ai_addr)->sin_addr;
+    tBufferPacket->ip.ip_p = protocol;
+    tBufferPacket->ip.ip_ttl = 23;
+    tBufferPacket->ip.ip_len = htons(packetsize);
 
-    tBufferPacket.tcp.source = htons(src_port);
-    tBufferPacket.tcp.dest = htons(dst_port);
-    tBufferPacket.tcp.doff = tcpHeaderLen/4;
-    tBufferPacket.tcp.res1 = 0;
-    tBufferPacket.tcp.res2 = 0;
+    if(checksumType == 2){
+        tBufferPacket->ip.ip_sum = 0;
+        tBufferPacket->ip.ip_sum = csum((void *) tBufferPacket, packetsize);
+    }
+
+	//Ip checksum
+
+    tBufferPacket->tcp.source = htons(src_port);
+    tBufferPacket->tcp.dest = htons(dst_port);
+    tBufferPacket->tcp.doff = tcpHeaderLen/4;
+    tBufferPacket->tcp.res1 = 0;
+    tBufferPacket->tcp.res2 = 0;
 
     //options
-    if(strchr(pOptions, 'f') != NULL) tBufferPacket.tcp.fin = 1;
-    else tBufferPacket.tcp.fin = 0;
-    if(strchr(pOptions, 's') != NULL) tBufferPacket.tcp.syn = 1;
-    else tBufferPacket.tcp.syn = 0;
-    if(strchr(pOptions, 'r') != NULL) tBufferPacket.tcp.rst = 1;
-    else tBufferPacket.tcp.rst = 0;
-    if(strchr(pOptions, 'p') != NULL) tBufferPacket.tcp.psh = 1;
-    else tBufferPacket.tcp.psh = 0;
-    if(strchr(pOptions, 'a') != NULL) tBufferPacket.tcp.ack = 1;
-    else tBufferPacket.tcp.ack = 0;
-    if(strchr(pOptions, 'u') != NULL) tBufferPacket.tcp.urg = 1;
-    else tBufferPacket.tcp.urg = 0;
+    if(strchr(pOptions, 'f') != NULL) tBufferPacket->tcp.fin = 1;
+    else tBufferPacket->tcp.fin = 0;
+    if(strchr(pOptions, 's') != NULL) tBufferPacket->tcp.syn = 1;
+    else tBufferPacket->tcp.syn = 0;
+    if(strchr(pOptions, 'r') != NULL) tBufferPacket->tcp.rst = 1;
+    else tBufferPacket->tcp.rst = 0;
+    if(strchr(pOptions, 'p') != NULL) tBufferPacket->tcp.psh = 1;
+    else tBufferPacket->tcp.psh = 0;
+    if(strchr(pOptions, 'a') != NULL) tBufferPacket->tcp.ack = 1;
+    else tBufferPacket->tcp.ack = 0;
+    if(strchr(pOptions, 'u') != NULL) tBufferPacket->tcp.urg = 1;
+    else tBufferPacket->tcp.urg = 0;
 
     //rest of options
     seq = 1;
@@ -446,42 +455,124 @@ int tcp_sendPacket(int sock, int src_port, int dst_port, struct addrinfo *dest, 
             }
         }
     }
-    // printf("seq: %d || seq_ack: %d\n", seq, seq_ack); //for debuging use
 
-    tBufferPacket.tcp.seq = htonl(seq);
-    tBufferPacket.tcp.ack_seq = htonl(seq_ack);
-    tBufferPacket.tcp.window = htons(65535);
-    tBufferPacket.tcp.check = 0;
-    tBufferPacket.tcp.urg_ptr = 0;
+    tBufferPacket->tcp.seq = htonl(seq);
+    tBufferPacket->tcp.ack_seq = htonl(seq_ack);
+    tBufferPacket->tcp.window = htons(65535);
+    tBufferPacket->tcp.check = 0;
+    tBufferPacket->tcp.urg_ptr = 0;
 
-    memset(tBufferPacket.payload, '\0', PAYLOAD_MAX_LEN);
-    strcpy(tBufferPacket.payload, message);
+    memset(tBufferPacket->payload, '\0', PAYLOAD_MAX_LEN);
+    strcpy(tBufferPacket->payload, message);
 
-    tBufferPacket.tcp.check = compute_tcp_checksum_withFullPacket((void *) &tBufferPacket);
-    // printf("validate: %d\n", validate_tcp_checksum((struct iphdr *) &tBufferPacket.ip, (unsigned short *) &tBufferPacket.tcp));
+    return packetsize;
+}
 
-    //send tcp packet
-    success = sendto(sock, &tBufferPacket, packetsize, 0, dest->ai_addr, dest->ai_addrlen);
-    if (success < 0){
-        // printf("ERROR SENDING PACKET\n");
-        return -1;
+
+ #define DESTMAC0	0x78
+ #define DESTMAC1	0x92
+ #define DESTMAC2	0x9c
+ #define DESTMAC3	0xeb
+ #define DESTMAC4	0x3f
+ #define DESTMAC5	0x3e
+
+//if success return packet length
+int tcp_sendPacket(int sock, int src_port, int dst_port, struct addrinfo *dest, struct addrinfo *source, char message[PAYLOAD_MAX_LEN], char* pOptions){
+    //construct header
+    int protocol = getProtocol(checksumType);
+    int packetsize;
+
+    if(checksumType == 2) {
+        struct eth_packet outerBufferPacket;
+        packetsize = constructTcpHeader(
+            &outerBufferPacket.iptcp, 
+            protocol, 
+            src_port, 
+            dst_port, 
+            dest, 
+            source, 
+            message, 
+            pOptions
+        );
+
+        outerBufferPacket.iptcp.tcp.check = compute_tcpcrc_checksum((void *) &outerBufferPacket + sizeof(struct ethhdr));
+
+        outerBufferPacket.eth.h_source[0] = (unsigned char)(ifreq_c.ifr_hwaddr.sa_data[0]);
+        outerBufferPacket.eth.h_source[1] = (unsigned char)(ifreq_c.ifr_hwaddr.sa_data[1]);
+        outerBufferPacket.eth.h_source[2] = (unsigned char)(ifreq_c.ifr_hwaddr.sa_data[2]);
+        outerBufferPacket.eth.h_source[3] = (unsigned char)(ifreq_c.ifr_hwaddr.sa_data[3]);
+        outerBufferPacket.eth.h_source[4] = (unsigned char)(ifreq_c.ifr_hwaddr.sa_data[4]);
+        outerBufferPacket.eth.h_source[5] = (unsigned char)(ifreq_c.ifr_hwaddr.sa_data[5]);
+
+        outerBufferPacket.eth.h_dest[0]    =  DESTMAC0;
+        outerBufferPacket.eth.h_dest[1]    =  DESTMAC1;
+        outerBufferPacket.eth.h_dest[2]    =  DESTMAC2;
+        outerBufferPacket.eth.h_dest[3]    =  DESTMAC3;
+        outerBufferPacket.eth.h_dest[4]    =  DESTMAC4;
+        outerBufferPacket.eth.h_dest[5]    =  DESTMAC5;
+
+        outerBufferPacket.eth.h_proto = htons(ETH_P_IP);   //0x800
+        
+        struct sockaddr_ll sadr_ll;
+        sadr_ll.sll_ifindex = ifreq_i.ifr_ifindex;
+        sadr_ll.sll_halen   = ETH_ALEN;
+        sadr_ll.sll_addr[0]  = DESTMAC0;
+        sadr_ll.sll_addr[1]  = DESTMAC1;
+        sadr_ll.sll_addr[2]  = DESTMAC2;
+        sadr_ll.sll_addr[3]  = DESTMAC3;
+        sadr_ll.sll_addr[4]  = DESTMAC4;
+        sadr_ll.sll_addr[5]  = DESTMAC5;
+
+        
+        printf("I'm here\n");
+        fflush(stdout);
+	    int send_len = sendto(sock, &outerBufferPacket, 64, 0, (const struct sockaddr*)&sadr_ll, sizeof(struct sockaddr_ll));
+        
+		if(send_len<0){
+			printf("error in sending....sendlen=%d....errno=%d\n",send_len,errno);
+			return -1;
+
+		}
+
+    }else{
+        struct tcp_packet tBufferPacket;
+        packetsize = constructTcpHeader(
+            &tBufferPacket, 
+            protocol, 
+            src_port, 
+            dst_port, 
+            dest, 
+            source, 
+            message, 
+            pOptions
+        );
+        tBufferPacket.tcp.check = compute_tcp_checksum_withFullPacket((void *) &tBufferPacket);
+        // printf("validate: %d\n", validate_tcp_checksum((struct iphdr *) &tBufferPacket.ip, (unsigned short *) &tBufferPacket.tcp));
+
+        int success = sendto(sock, &tBufferPacket, packetsize, 0, dest->ai_addr, dest->ai_addrlen);
+        if (success < 0){
+            // printf("ERROR SENDING PACKET\n");
+            return -1;
+        }
+
+        if(recordDB){
+            char jsonSubmit[99999];
+            //record to database
+            char* packetBinSeq = toBinaryString((void *) &tBufferPacket, packetsize);
+            char* dataBinSeq = toBinaryString((void *) message, strlen(message));
+            char* timestamp = getTimestamp();
+                        
+            if(recordJson) sprintf(jsonSubmit, "{\"tableName\": \"packet_sent\", \"ifAuto\": true, \"seq\": %u, \"data\": \"%s\", \"packet\": \"%s\", \"time\": \"%s\"}", tBufferPacket.tcp.seq, dataBinSeq, packetBinSeq, timestamp);
+            else sprintf(jsonSubmit, "\"packet_sent\",true,%u,\"%s\",\"%s\",\"%s\"", tBufferPacket.tcp.seq, dataBinSeq, packetBinSeq, timestamp);
+
+            db_put((void *) jsonSubmit, 1);
+
+            free(packetBinSeq);
+            free(dataBinSeq);
+            free(timestamp);
+        }
     }
 
-    if(recordDB){
-        char jsonSubmit[99999];
-        //record to database
-        char* packetBinSeq = toBinaryString((void *) &tBufferPacket, packetsize);
-        char* dataBinSeq = toBinaryString((void *) message, strlen(message));
-        char* timestamp = getTimestamp();
-                    
-        if(recordJson) sprintf(jsonSubmit, "{\"tableName\": \"packet_sent\", \"ifAuto\": true, \"seq\": %u, \"data\": \"%s\", \"packet\": \"%s\", \"time\": \"%s\"}", seq, dataBinSeq, packetBinSeq, timestamp);
-        else sprintf(jsonSubmit, "\"packet_sent\",true,%u,\"%s\",\"%s\",\"%s\"", seq, dataBinSeq, packetBinSeq, timestamp);
-        db_put((void *) jsonSubmit, 1);
-
-        free(packetBinSeq);
-        free(dataBinSeq);
-        free(timestamp);
-    }
 
     return packetsize;
 }
@@ -544,17 +635,6 @@ unsigned short compute_tcp_checksum(struct iphdr *pIph, unsigned short *ipPayloa
     sum += htons(IPPROTO_TCP);
     sum += htons(tcpLen);
 
-    /**
-     *  For Debugging, print out tcp packet in hex into console 
-    
-    int i;
-    unsigned char *pointer = (unsigned char *)ipPayload;
-    for (i = 0; i < tcpLen; i++) {
-        printf("%02x ", pointer[i]);
-    }
-    printf("\n");
-    */
-
     //initialize checksum to 0
     struct tcphdr* tcphdr = (struct tcphdr*)(ipPayload);
     tcphdr->check = 0;
@@ -580,7 +660,9 @@ unsigned short compute_tcp_checksum(struct iphdr *pIph, unsigned short *ipPayloa
 }
 
 //modified from: https://stackoverflow.com/questions/10564491/function-to-calculate-a-crc16-checksum
-unsigned short compute_tcpcrc_checksum(struct iphdr *pIph, unsigned short *ipPayload) {
+unsigned short compute_tcpcrc_checksum(void* fullPacket) {
+    struct iphdr *pIph = (struct iphdr *) fullPacket; //-Wall warning for packed struct, suppressed with void* pointer, Probably fixed, but not 100% sure
+    unsigned short *ipPayload = (unsigned short *) (fullPacket + sizeof(struct iphdr));
     // register unsigned long sum = 0;
     unsigned short tcpLen = ntohs(pIph->tot_len) - (pIph->ihl<<2);
 
@@ -703,4 +785,33 @@ unsigned short validate_tcp_checksum(struct iphdr *pIph, unsigned short *ipPaylo
 
     //set computation result
     return (unsigned short) sum;
+}
+
+
+/*
+	Generic checksum calculation function
+*/
+unsigned short csum(void *packetPtr,int nbytes) 
+{
+    unsigned short* ptr = packetPtr;
+	register long sum;
+	unsigned short oddbyte;
+	register short answer;
+
+	sum=0;
+	while(nbytes>1) {
+		sum+=*ptr++;
+		nbytes-=2;
+	}
+	if(nbytes==1) {
+		oddbyte=0;
+		*((u_char*)&oddbyte)=*(u_char*)ptr;
+		sum+=oddbyte;
+	}
+
+	sum = (sum>>16)+(sum & 0xffff);
+	sum = sum + (sum>>16);
+	answer=(short)~sum;
+	
+	return(answer);
 }

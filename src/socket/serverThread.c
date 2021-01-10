@@ -35,7 +35,7 @@ void* serverThread(void* vargp){
     int threadIndex = 0;
 
     int sock = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
-    while(1){
+    while(running){
         Rsock_packet recv_packet;
         listenForPacket_sync(&recv_packet, sock, settings->protocol, settings->source_ip, settings->port);
         handledCount++;
@@ -71,5 +71,6 @@ void* serverThread(void* vargp){
         
         free(recv_packet.pBuffer);
     }
+    close(sock);
     return NULL;
 }

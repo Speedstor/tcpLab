@@ -1,4 +1,5 @@
 #include <netdb.h>
+#include<net/if.h>
 #include <pthread.h>
 
 #ifndef GLOBAL_VARIABLES
@@ -16,5 +17,10 @@
 
     int recordDB;
 
+    int checksumType;
+
     int handledCount;
+
+    
+    struct ifreq ifreq_c,ifreq_i,ifreq_ip; 
 #endif

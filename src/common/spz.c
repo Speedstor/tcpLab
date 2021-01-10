@@ -10,6 +10,7 @@
 #include <math.h>
 
 #include "../global/global.h"
+#include "./record.h"
 
 #ifndef STATUS_BUFFER_MAX
 #define STATUS_BUFFER_MAX 1200
@@ -168,4 +169,54 @@ char* FileToString(char* path){
 		return returnString;
 	}
 	return NULL;
+}
+
+
+struct passArgs{
+    void* arg;
+    void *(*function_ptr) (void *);
+    pthread_cond_t done;
+};
+
+void* timeout_pass(void* pArgs){
+    pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
+    
+    struct passArgs* args = (struct passArgs*) pArgs;
+    args->function_ptr(args->arg);
+
+    pthread_cond_signal(&args->done);
+    return NULL;
+}
+
+void function_withTimeout(int timeout, void *(*function_ptr) (void *), void* args){
+    struct passArgs pArgs = {
+        args,
+        function_ptr,
+        PTHREAD_COND_INITIALIZER
+    };
+
+    pthread_mutex_t inProcess = PTHREAD_MUTEX_INITIALIZER;
+    pthread_t thread_id;
+
+    pthread_mutex_lock(&inProcess);
+    struct timespec abs_time;
+    clock_gettime(CLOCK_REALTIME, &abs_time);
+    abs_time.tv_sec += timeout;
+
+    pthread_create(&thread_id, NULL, timeout_pass, &args);
+
+    int ifTimeout = pthread_cond_timedwait(&pArgs.done, &inProcess, &abs_time);
+    if (ifTimeout == ETIMEDOUT){
+        if(verbose)     progressBar_print(100, "(-1) TIMEOUT: function timeout (%ds)\n", timeout);
+        else            printf("tcp request timeout   || \n");
+
+        if(recordDB){
+            db_put((void *) "---,---,---,---,---,---", 1);
+            db_put((void *) "---,---,---,---,---,---", 2);
+        }
+    }
+
+    pthread_mutex_unlock(&inProcess);
+    pthread_cancel(thread_id);
+    pthread_join(thread_id, NULL);
 }
