@@ -468,13 +468,12 @@ int constructTcpHeader(struct tcp_packet* tBufferPacket, int protocol, int src_p
     return packetsize;
 }
 
-
- #define DESTMAC0	0x78
- #define DESTMAC1	0x92
- #define DESTMAC2	0x9c
- #define DESTMAC3	0xeb
- #define DESTMAC4	0x3f
- #define DESTMAC5	0x3e
+ #define DESTMAC0	0x00
+ #define DESTMAC1	0x0c
+ #define DESTMAC2	0x29
+ #define DESTMAC3	0x52
+ #define DESTMAC4	0xef
+ #define DESTMAC5	0x14
 
 //if success return packet length
 int tcp_sendPacket(int sock, int src_port, int dst_port, struct addrinfo *dest, struct addrinfo *source, char message[PAYLOAD_MAX_LEN], char* pOptions){

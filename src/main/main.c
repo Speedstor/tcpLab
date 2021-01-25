@@ -5,7 +5,7 @@
 #include "../global/global.h"
 
 void usage();
-void setupGlobalEth(int sock_raw);
+void setupGlobalEth(int sock_raw, char* networkInterface);
 
 int main(int argc, char **argv) {
     //setting variables -------------
@@ -153,7 +153,7 @@ int main(int argc, char **argv) {
     if(checksumType == 1) settings.sendSocket = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
     else if(checksumType == 2) {
         settings.sendSocket = socket(AF_PACKET,SOCK_RAW,IPPROTO_RAW);
-        setupGlobalEth(settings.sendSocket);
+        setupGlobalEth(settings.sendSocket, settings.network_interface);
     }
 	settings.receiveSocket = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if (settings.sendSocket < 0 || settings.receiveSocket < 0) {
@@ -221,17 +221,17 @@ void usage(){
 
 }
 
-void setupGlobalEth(int sock_raw){
+void setupGlobalEth(int sock_raw, char* networkInterface){
     
 	memset(&ifreq_i,0,sizeof(ifreq_i));
-	strncpy(ifreq_i.ifr_name,"wlp0s20f3",IFNAMSIZ-1);
+	strncpy(ifreq_i.ifr_name,networkInterface,IFNAMSIZ-1);
 
 	if((ioctl(sock_raw,SIOCGIFINDEX,&ifreq_i))<0)
 		printf("error in index ioctl reading");
 
         
 	memset(&ifreq_c,0,sizeof(ifreq_c));
-	strncpy(ifreq_c.ifr_name,"wlp0s20f3",IFNAMSIZ-1);
+	strncpy(ifreq_c.ifr_name,networkInterface,IFNAMSIZ-1);
 
 	if((ioctl(sock_raw,SIOCGIFHWADDR,&ifreq_c))<0)
 		printf("error in SIOCGIFHWADDR ioctl reading");

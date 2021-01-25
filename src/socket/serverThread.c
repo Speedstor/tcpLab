@@ -40,34 +40,36 @@ void* serverThread(void* vargp){
         listenForPacket_sync(&recv_packet, sock, settings->protocol, settings->source_ip, settings->port);
         handledCount++;
 
-        char sendMessage[MESSAGE_MAX_LEN];
-        strcpy(sendMessage, settings->message);
-        Packet_hint_pointers hints = { "", htons(recv_packet.tcp->source), "", settings->port, &recv_packet, ntohl(recv_packet.tcp->seq), settings->sendSocket, (char*) &sendMessage, 0};
-        strcpy(hints.RemoteIpAddr, inet_ntoa((recv_packet.source).sin_addr));
-        strcpy(hints.LocalIpAddr, settings->source_ip);
+        if(checksumType == 1){
+            char sendMessage[MESSAGE_MAX_LEN];
+            strcpy(sendMessage, settings->message);
+            Packet_hint_pointers hints = { "", htons(recv_packet.tcp->source), "", settings->port, &recv_packet, ntohl(recv_packet.tcp->seq), settings->sendSocket, (char*) &sendMessage, 0};
+            strcpy(hints.RemoteIpAddr, inet_ntoa((recv_packet.source).sin_addr));
+            strcpy(hints.LocalIpAddr, settings->source_ip);
 
-        //find thread for the request
-        threadIndex++;
-        if(threadIndex >= SERVER_MAX_CONNECTIONS) threadIndex = 0;
-        int count = 0;
-        if(threadComplete[threadIndex] == 2){
-            pthread_join(requestHandlerThread_ids[threadIndex], NULL);
-            threadComplete[threadIndex] = 0;
-        }
-        while(threadComplete[threadIndex] != 0) {
+            //find thread for the request
+            threadIndex++;
+            if(threadIndex >= SERVER_MAX_CONNECTIONS) threadIndex = 0;
+            int count = 0;
             if(threadComplete[threadIndex] == 2){
                 pthread_join(requestHandlerThread_ids[threadIndex], NULL);
                 threadComplete[threadIndex] = 0;
-                break;
             }
-            threadIndex++;
-            count++;
-            if(threadIndex >= SERVER_MAX_CONNECTIONS) threadIndex = 0;
-            if(count > SERVER_MAX_CONNECTIONS) sleep(1);
+            while(threadComplete[threadIndex] != 0) {
+                if(threadComplete[threadIndex] == 2){
+                    pthread_join(requestHandlerThread_ids[threadIndex], NULL);
+                    threadComplete[threadIndex] = 0;
+                    break;
+                }
+                threadIndex++;
+                count++;
+                if(threadIndex >= SERVER_MAX_CONNECTIONS) threadIndex = 0;
+                if(count > SERVER_MAX_CONNECTIONS) sleep(1);
+            }
+            hints.expansion_ptr = (void*) &threadComplete[threadIndex];
+            pthread_create(&requestHandlerThread_ids[threadIndex], NULL, tcpHandleRequest_wTimeout, (void *) &hints);
+            threadComplete[threadIndex] = -1;
         }
-        hints.expansion_ptr = (void*) &threadComplete[threadIndex];
-        pthread_create(&requestHandlerThread_ids[threadIndex], NULL, tcpHandleRequest_wTimeout, (void *) &hints);
-        threadComplete[threadIndex] = -1;
         
         free(recv_packet.pBuffer);
     }

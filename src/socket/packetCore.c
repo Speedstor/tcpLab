@@ -82,15 +82,16 @@ int listenForPacket_sync(Rsock_packet* recv_packet, int socket, int protocol, ch
         switch(protocol){
         case 6:
         case 206:
-            if(strcmp(dest_ip, inet_ntoa((recv_packet->dest).sin_addr)) == 0
-                    && htons(recv_packet->tcp->dest) == dest_port
-                    && recv_packet->tcp->syn == 1) {
+            if( htons(recv_packet->tcp->dest) == dest_port) {
+                    
+                if(checksumType == 1 && recv_packet->tcp->syn != 1) continue;
 
                 //might be better to be in the upperFunction
                 // if(validate_tcp_checksum(recv_packet->ip, (unsigned short *) &recv_packet->tcp) != 0){
                     // printf("ERROR: !!received tcp packet checksum invalid\n");  //TODO!!!::: 
                     // return -1;
                 // }
+                printf("recieved!!!!!!!!\n\n");
 
                 if(recordDB){
                     //find index and update database
